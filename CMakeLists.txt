@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 
 #########################################################
-project(ABC  VERSION 1.0.0)
+project(gul  VERSION 1.0.0)
 #########################################################
 
 
@@ -55,6 +55,7 @@ add_custom_target( other_files
                           # LICENSE
                            .gitlab-ci.yml
                           # .travis.yml
+                           conanfile.txt
                            appveyor.yml
                            cmake/CompilerWarnings.cmake
                            cmake/Coverage.cmake

@@ -66,7 +66,10 @@ foreach(file ${files})
     target_link_libraries( ${EXE_NAME}
                                 PRIVATE
                                     ${PROJECT_NAME}-catchmain
-                                    ${PROJECT_NAME})
+                                    ${PROJECT_NAME}
+                                    CONAN_PKG::glm
+                                    CONAN_PKG::stb)
+
 
     add_test(  NAME    ${TEST_NAME}
                COMMAND ${exeCmd}
