@@ -46,7 +46,7 @@ using VertexAttribute_v = std::variant<
                     >;
 
 template<typename T>
-static constexpr uint32_t getGLNumComponents()
+static constexpr uint32_t getNumComponents()
 {
     if constexpr( std::is_fundamental<T>::value )
     {
@@ -58,6 +58,14 @@ static constexpr uint32_t getGLNumComponents()
     }
 }
 
+/**
+ * @brief The MeshPrimitive struct
+ *
+ * A Mesh Primitive is a class which allows
+ * you to represent a triangular mesh
+ *
+ * The attributes are
+ */
 struct MeshPrimitive
 {
     using attribute_type = VertexAttribute_v;
@@ -98,6 +106,13 @@ struct MeshPrimitive
         return size;
     }
 
+    /**
+     * @brief byteSize
+     * @param v
+     * @return
+     *
+     * Returns the byte size of the entire attribute
+     */
     static uint64_t byteSize(attribute_type const & v)
     {
         return std::visit( [&](auto && arg)
@@ -107,6 +122,13 @@ struct MeshPrimitive
             return arg.size() * sizeof(attr_type);
         }, v);
     }
+    /**
+     * @brief attributeSize
+     * @param v
+     * @return
+     *
+     * Returns the size of the attribute array's value_type
+     */
     static uint64_t attributeSize(attribute_type const & v)
     {
         return std::visit( [&](auto && arg)
@@ -116,6 +138,13 @@ struct MeshPrimitive
             return sizeof(attr_type);
         }, v);
     }
+
+    /**
+     * @brief attributeCount
+     * @param v
+     * @return
+     * Returns the number of attributes
+     */
     static size_t attributeCount(attribute_type const & v)
     {
         return std::visit( [&](auto && arg)
@@ -124,6 +153,18 @@ struct MeshPrimitive
         }, v);
     }
 
+    /**
+     * @brief copySequential
+     * @param data
+     * @param V
+     * @return
+     *
+     * Copies the attribute data sequentially
+     * if given two attributes p and n,
+     * the data is copied as follows
+     *
+     * p0,p1,p2,p3....n0,n1,n2,n3
+     */
     static std::vector<size_t> copySequential(void * data, std::vector<VertexAttribute_v const*> const & V)
     {
         std::vector<size_t> offsets;
@@ -147,6 +188,21 @@ struct MeshPrimitive
         return offsets;
     }
 
+    /**
+     * @brief copyInterleaved
+     * @param data
+     * @param V
+     * @param startIndex
+     * @param count
+     *
+     * Copies the attribute data into the buffer but
+     * interleaves each attribute.
+     *
+     * if given two attributes p and n,
+     * the data is copied as follows
+     *
+     * p0,n0,p1,n1,p2,n2...
+     */
     static void copyInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
     {
         (void)data;
@@ -178,6 +234,17 @@ struct MeshPrimitive
         }
     }
 
+    /**
+     * @brief strideCopy
+     * @param start
+     * @param v
+     * @param stride
+     *
+     * Performs a stride copy of the attribute's data
+     *
+     * stride should be at least as large as attributeSize(v), otherwise
+     * data will be overwrritten.
+     */
     static void strideCopy(void * start, VertexAttribute_v const &v, size_t stride)
     {
         return std::visit( [stride, start](auto && arg)
@@ -189,46 +256,6 @@ struct MeshPrimitive
                 dOut += stride;
             }
         }, v);
-    }
-
-    std::array<uint64_t,9> copyData(void * data) const
-    {
-        std::array<uint64_t,9> outputOffsets = {0};
-
-        uint64_t offset = 0;
-        auto _cpy = [&](auto const &D) -> uint64_t
-        {
-            return std::visit([&](auto && arg) -> uint64_t
-            {
-                using T = std::decay_t<decltype(arg)>;
-                auto d = static_cast<uint8_t*>(data) + offset;
-                auto bytesize = arg.size() * sizeof( typename T::value_type);
-
-                if( bytesize > 0)
-                {
-                    std::memcpy( d, arg.data() , bytesize );
-
-                    auto currentOffset = offset;
-                    offset += bytesize;
-                    return currentOffset;
-                }
-                return 0u;
-            }, D);
-
-            return 0u;
-        };
-
-        outputOffsets[0] = _cpy(POSITION);
-        outputOffsets[1] = _cpy(NORMAL);
-        outputOffsets[2] = _cpy(TANGENT);
-        outputOffsets[3] = _cpy(TEXCOORD_0);
-        outputOffsets[4] = _cpy(TEXCOORD_1);
-        outputOffsets[5] = _cpy(COLOR_0);
-        outputOffsets[6] = _cpy(JOINTS_0);
-        outputOffsets[7] = _cpy(WEIGHTS_0);
-        outputOffsets[8] = _cpy(INDEX);
-
-        return outputOffsets;
     }
 };
 
