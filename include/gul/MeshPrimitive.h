@@ -46,7 +46,7 @@ using VertexAttribute_v = std::variant<
                     >;
 
 template<typename T>
-static constexpr uint32_t getNumComponents()
+inline constexpr uint32_t getNumComponents()
 {
     if constexpr( std::is_fundamental<T>::value )
     {
@@ -57,6 +57,162 @@ static constexpr uint32_t getNumComponents()
         return static_cast<uint32_t>(T::length());
     }
 }
+
+/**
+ * @brief byteSize
+ * @param v
+ * @return
+ *
+ * Returns the byte size of the entire attribute
+ */
+inline uint64_t VertexAttributeByteSize(VertexAttribute_v const & v)
+{
+    return std::visit( [&](auto && arg)
+    {
+        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
+        using attr_type = typename V::value_type;
+        return arg.size() * sizeof(attr_type);
+    }, v);
+}
+
+/**
+ * @brief attributeSize
+ * @param v
+ * @return
+ *
+ * Returns the size of the attribute array's value_type
+ */
+inline size_t VertexAttributeSizeOf(VertexAttribute_v const & v)
+{
+    return std::visit( [&](auto && arg)
+    {
+        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
+        using attr_type = typename V::value_type;
+        return sizeof(attr_type);
+    }, v);
+}
+
+/**
+ * @brief attributeCount
+ * @param v
+ * @return
+ * Returns the number of attributes
+ */
+inline size_t VertexAttributeCount(VertexAttribute_v const & v)
+{
+    return std::visit( [&](auto && arg)
+    {
+        return arg.size();
+    }, v);
+}
+
+/**
+ * @brief copySequential
+ * @param data
+ * @param V
+ * @return
+ *
+ * Copies the attribute data sequentially
+ * if given two attributes p and n,
+ * the data is copied as follows
+ *
+ * p0,p1,p2,p3....n0,n1,n2,n3
+ */
+inline std::vector<size_t> VertexAttributeCopySequential(void * data, std::vector<VertexAttribute_v const*> const & V)
+{
+    std::vector<size_t> offsets;
+    size_t off=0;
+    for(auto & v : V)
+    {
+        offsets.push_back( off);
+        off += VertexAttributeByteSize(*v);
+    }
+
+    auto dOut = static_cast<uint8_t*>(data);
+    for(auto & v : V)
+    {
+        std::visit( [&](auto && arg)
+                {
+                    using T = std::decay_t<decltype(arg)>;
+                    std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
+                    dOut += arg.size()*sizeof(typename T::value_type);
+                }, *v);
+    }
+    return offsets;
+}
+
+/**
+ * @brief strideCopy
+ * @param start
+ * @param v
+ * @param stride
+ *
+ * Performs a stride copy of the attribute's data
+ *
+ * stride should be at least as large as attributeSize(v), otherwise
+ * data will be overwrritten.
+ */
+inline void VertexAttributeStrideCopy(void * start, VertexAttribute_v const &v, size_t stride)
+{
+    return std::visit( [stride, start](auto && arg)
+    {
+        auto dOut = static_cast<uint8_t*>(start);
+        for(auto & a : arg)
+        {
+            std::memcpy(dOut, &a, sizeof(a));
+            dOut += stride;
+        }
+    }, v);
+}
+
+
+/**
+ * @brief copyInterleaved
+ * @param data
+ * @param V
+ * @param startIndex
+ * @param count
+ *
+ * Copies the attribute data into the buffer but
+ * interleaves each attribute.
+ *
+ * if given two attributes p and n,
+ * the data is copied as follows
+ *
+ * p0,n0,p1,n1,p2,n2...
+ */
+inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
+{
+    size_t byteSize=0;
+    uint64_t stride=0;
+
+    uint8_t * out = static_cast<uint8_t*>(data);
+    (void)out;
+
+    size_t S=0;
+    std::vector<size_t> offsets;
+    size_t off=0;
+    for(auto & v : V)
+    {
+        stride += VertexAttributeSizeOf(*v);
+        S = std::min(S, VertexAttributeCount(*v) );
+        offsets.push_back( off);
+        off+=VertexAttributeSizeOf(*v);
+    }
+
+    count = std::min(count, VertexAttributeCount(*V.front()));
+
+    size_t last = startIndex + count;
+    last = std::min(last, VertexAttributeCount(*V.front()));
+
+    for(size_t i=startIndex;i<last;i++)
+    {
+        VertexAttributeStrideCopy(out + offsets[i], *V[i], stride);
+    }
+    return byteSize;
+}
+
+
 
 /**
  * @brief The MeshPrimitive struct
@@ -74,7 +230,7 @@ struct MeshPrimitive
     attribute_type NORMAL     = std::vector<glm::vec3>  ();
     attribute_type TANGENT    = std::vector<glm::vec3>  ();
     attribute_type TEXCOORD_0 = std::vector<glm::vec2>  ();
-    attribute_type TEXCOORD_1 = std::vector<glm::vec3>  ();
+    attribute_type TEXCOORD_1 = std::vector<glm::vec2>  ();
     attribute_type COLOR_0    = std::vector<glm::u8vec4>();
     attribute_type JOINTS_0   = std::vector<glm::u16vec4>();
     attribute_type WEIGHTS_0  = std::vector<glm::vec4>();
@@ -93,169 +249,17 @@ struct MeshPrimitive
     {
         uint64_t size = 0;
 
-        size += byteSize(POSITION  );
-        size += byteSize(NORMAL    );
-        size += byteSize(TANGENT   );
-        size += byteSize(TEXCOORD_0);
-        size += byteSize(TEXCOORD_1);
-        size += byteSize(COLOR_0   );
-        size += byteSize(JOINTS_0  );
-        size += byteSize(WEIGHTS_0 );
-        size += byteSize(INDEX);
+        size += VertexAttributeByteSize(POSITION  );
+        size += VertexAttributeByteSize(NORMAL    );
+        size += VertexAttributeByteSize(TANGENT   );
+        size += VertexAttributeByteSize(TEXCOORD_0);
+        size += VertexAttributeByteSize(TEXCOORD_1);
+        size += VertexAttributeByteSize(COLOR_0   );
+        size += VertexAttributeByteSize(JOINTS_0  );
+        size += VertexAttributeByteSize(WEIGHTS_0 );
+        size += VertexAttributeByteSize(INDEX);
 
         return size;
-    }
-
-    /**
-     * @brief byteSize
-     * @param v
-     * @return
-     *
-     * Returns the byte size of the entire attribute
-     */
-    static uint64_t byteSize(attribute_type const & v)
-    {
-        return std::visit( [&](auto && arg)
-        {
-            using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-            using attr_type = typename V::value_type;
-            return arg.size() * sizeof(attr_type);
-        }, v);
-    }
-    /**
-     * @brief attributeSize
-     * @param v
-     * @return
-     *
-     * Returns the size of the attribute array's value_type
-     */
-    static uint64_t attributeSize(attribute_type const & v)
-    {
-        return std::visit( [&](auto && arg)
-        {
-            using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-            using attr_type = typename V::value_type;
-            return sizeof(attr_type);
-        }, v);
-    }
-
-    /**
-     * @brief attributeCount
-     * @param v
-     * @return
-     * Returns the number of attributes
-     */
-    static size_t attributeCount(attribute_type const & v)
-    {
-        return std::visit( [&](auto && arg)
-        {
-            return arg.size();
-        }, v);
-    }
-
-    /**
-     * @brief copySequential
-     * @param data
-     * @param V
-     * @return
-     *
-     * Copies the attribute data sequentially
-     * if given two attributes p and n,
-     * the data is copied as follows
-     *
-     * p0,p1,p2,p3....n0,n1,n2,n3
-     */
-    static std::vector<size_t> copySequential(void * data, std::vector<VertexAttribute_v const*> const & V)
-    {
-        std::vector<size_t> offsets;
-        size_t off=0;
-        for(auto & v : V)
-        {
-            offsets.push_back( off);
-            off += attributeSize(*v)*attributeCount(*v);
-        }
-
-        auto dOut = static_cast<uint8_t*>(data);
-        for(auto & v : V)
-        {
-            std::visit( [&](auto && arg)
-                    {
-                        using T = std::decay_t<decltype(arg)>;
-                        std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
-                        dOut += arg.size()*sizeof(typename T::value_type);
-                    }, *v);
-        }
-        return offsets;
-    }
-
-    /**
-     * @brief copyInterleaved
-     * @param data
-     * @param V
-     * @param startIndex
-     * @param count
-     *
-     * Copies the attribute data into the buffer but
-     * interleaves each attribute.
-     *
-     * if given two attributes p and n,
-     * the data is copied as follows
-     *
-     * p0,n0,p1,n1,p2,n2...
-     */
-    static void copyInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
-    {
-        (void)data;
-        (void)V;
-        uint64_t stride=0;
-
-        uint8_t * out = static_cast<uint8_t*>(data);
-        (void)out;
-
-        size_t S=0;
-        std::vector<size_t> offsets;
-        size_t off=0;
-        for(auto & v : V)
-        {
-            stride += attributeSize(*v);
-            S = std::min(S, attributeCount(*v) );
-            offsets.push_back( off);
-            off+=attributeSize(*v);
-        }
-
-        count = std::min(count, attributeCount(*V.front()));
-
-        size_t last = startIndex + count;
-        last = std::min(last, attributeCount(*V.front()));
-
-        for(size_t i=startIndex;i<last;i++)
-        {
-            strideCopy(out + offsets[i], *V[i], stride);
-        }
-    }
-
-    /**
-     * @brief strideCopy
-     * @param start
-     * @param v
-     * @param stride
-     *
-     * Performs a stride copy of the attribute's data
-     *
-     * stride should be at least as large as attributeSize(v), otherwise
-     * data will be overwrritten.
-     */
-    static void strideCopy(void * start, VertexAttribute_v const &v, size_t stride)
-    {
-        return std::visit( [stride, start](auto && arg)
-        {
-            auto dOut = static_cast<uint8_t*>(start);
-            for(auto & a : arg)
-            {
-                std::memcpy(dOut, &a, sizeof(a));
-                dOut += stride;
-            }
-        }, v);
     }
 };
 
@@ -331,7 +335,6 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
 
     auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
     auto & C = std::get< std::vector<glm::u8vec4> >(M.COLOR_0);
-
 
     //_uvec4 xColor{1,1,1,255};
     _uvec4 xColor{80,80,80,255};

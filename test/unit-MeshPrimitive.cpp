@@ -12,7 +12,7 @@ SCENARIO("Stride Copy")
         {
             std::vector<uint32_t> D = {0,0,0,0,0,0};
 
-            gul::MeshPrimitive::strideCopy(D.data(), V, 2*sizeof(uint32_t));
+            gul::VertexAttributeStrideCopy(D.data(), V, 2*sizeof(uint32_t));
 
             THEN("Every other value is copied")
             {
@@ -38,7 +38,7 @@ SCENARIO("Copy Interleaved")
         {
             std::vector<uint32_t> D(100);
 
-            gul::MeshPrimitive::copyInterleaved(D.data(), {&V1,&V2});
+            gul::VertexAttributeInterleaved(D.data(), {&V1,&V2});
 
             THEN("Every other value is copied")
             {
@@ -69,7 +69,7 @@ SCENARIO("Copy Sequential")
         {
             std::vector<uint32_t> D(100);
 
-            auto offsets = gul::MeshPrimitive::copySequential(D.data(), {&V1,&V2});
+            auto offsets = gul::VertexAttributeCopySequential(D.data(), {&V1,&V2});
 
             REQUIRE( offsets[0] == 0);
             REQUIRE( offsets[1] == sizeof(glm::uvec2)*2);

@@ -68,7 +68,7 @@ target_compile_features( ${lib_name}
                         )
 target_include_directories( ${lib_name}
                                 INTERFACE
-                                    "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>"
+                                    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
                                     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated_headers>"
                            )
 
