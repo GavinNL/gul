@@ -19,11 +19,55 @@ ctest --output-on-failure
 
 ```
 
+## Utils
+
+## uri
+
+## ResourceLocator
+
+
+## Net
+
+## socket.h
+
+- Simple cross platform socket class
+
+
+
+
+## Math
+
+### Transform
+
+- Non-matrix representation of a T * R * S matrix for 3D transformations
+
+
 
 ## Image.h
 
 Requirements: None
 
 ```cpp
+
+```
+
+## MeshPrimitive.h
+
+Simple representation of a mesh.
+
+
+
+
+## Meta (gul/meta)
+
+Some template meta-programming helpers
+
+### has_destructor<T>
+
+Checks if `T` has a destructor. This can be used to check if class definitions exist:
+
+```cpp
+
+static_assert( gul::has_destructor< std::hash<MyClass> >::value, "T must be be hashable");
 
 ```
