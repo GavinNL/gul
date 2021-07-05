@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace gul
 {
@@ -46,6 +47,13 @@ struct Transform
                                                                     rotation(_rotation),
                                                                     scale(_scale)
     {
+    }
+
+    Transform(glm::mat4 const & M)
+    {
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(M, scale, rotation, position, skew,perspective);
     }
 
     /**
@@ -283,6 +291,38 @@ struct Transform
         return Transform( {0,0,0}, glm::quat( { 0,0,-glm::half_pi<float>() } ));
     }
 };
+
+/**
+ * @brief inverse
+ * @param L
+ * @return
+ *
+ * If the matrix form of T = P * R * S
+ * then the inverse is :
+ *    T' = (P * R * S)'
+ *    T' =  S' * R' * P'
+ *
+ * Which is a transform where the positions/scales
+ * are switched and inverted.
+ * Although this works with matrices, this is
+ * incorrect for Transforms.
+ *
+ * if x1 = T * x;
+ *
+ * x is first scaled by s, then rotated by r, then translated by t.
+ *
+ * The reverse of this is:
+ *
+ * x1 is first scaled by 1/s, then rotated -r, then translated -t.
+ */
+inline Transform inverse( const Transform & L)
+{
+    return Transform{
+        -L.position,
+        glm::conjugate(L.rotation),
+        1.0f / L.scale
+    };
+}
 
 /**
  * @brief mix
