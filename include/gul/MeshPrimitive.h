@@ -10,40 +10,65 @@
 
 namespace gul
 {
+
+#define _VECTYPES(_T) \
+std::vector< _T                             >, \
+std::vector< glm::vec<2, _T, glm::defaultp> >, \
+std::vector< glm::vec<3, _T, glm::defaultp> >, \
+std::vector< glm::vec<4, _T, glm::defaultp> >
+
 using VertexAttribute_v = std::variant<
-                            std::vector< glm::vec2 >,
-                            std::vector< glm::vec3 >,
-                            std::vector< glm::vec4 >,
-                            std::vector< glm::dvec2 >,
-                            std::vector< glm::dvec3 >,
-                            std::vector< glm::dvec4 >,
-                            std::vector< glm::u32vec2 >,
-                            std::vector< glm::u32vec3 >,
-                            std::vector< glm::u32vec4 >,
-                            std::vector< glm::u16vec2 >,
-                            std::vector< glm::u16vec3 >,
-                            std::vector< glm::u16vec4 >,
-                            std::vector< glm::u8vec2 >,
-                            std::vector< glm::u8vec3 >,
-                            std::vector< glm::u8vec4 >,
-                            std::vector< glm::i32vec2 >,
-                            std::vector< glm::i32vec3 >,
-                            std::vector< glm::i32vec4 >,
-                            std::vector< glm::i16vec2 >,
-                            std::vector< glm::i16vec3 >,
-                            std::vector< glm::i16vec4 >,
-                            std::vector< glm::i8vec2 >,
-                            std::vector< glm::i8vec3 >,
-                            std::vector< glm::i8vec4 >,
-                            std::vector< uint8_t >,
-                            std::vector< uint16_t >,
-                            std::vector< uint32_t >,
-                            std::vector< int8_t >,
-                            std::vector< int16_t >,
-                            std::vector< int32_t >,
-                            std::vector< float >,
-                            std::vector< double >
+                            _VECTYPES(float) ,
+                            _VECTYPES(double) ,
+                            _VECTYPES(int32_t) ,
+                            _VECTYPES(uint32_t) ,
+                            _VECTYPES(int16_t) ,
+                            _VECTYPES(uint16_t) ,
+                            _VECTYPES(int8_t) ,
+                            _VECTYPES(uint8_t) ,
+
+                            std::vector< glm::mat3 >,
+                            std::vector< glm::mat4 >,
+                            std::vector< glm::dmat3 >,
+                            std::vector< glm::dmat4 >
                     >;
+
+#undef _VECTYPES
+
+template<typename T>
+VertexAttribute_v generateFromAccessor_t(uint32_t numComponents)
+{
+    switch(numComponents)
+    {
+        case 1: return std::vector< T >();
+            break;
+        case 2: return std::vector< glm::vec<2, T, glm::defaultp > >();
+            break;
+        case 3: return std::vector< glm::vec<3, T, glm::defaultp > >();
+            break;
+        case 4: return std::vector< glm::vec<4, T, glm::defaultp > >();
+            break;
+        default:
+            throw std::runtime_error("Not supported for vertex attributes");
+    }
+}
+
+inline VertexAttribute_v generateFromGLTFAccessor(uint32_t GL_componentType, uint32_t numComponents)
+{
+    switch(GL_componentType)
+    {
+        case 5120: return generateFromAccessor_t<int8_t>(numComponents);
+        case 5121: return generateFromAccessor_t<uint8_t>(numComponents);
+        case 5122: return generateFromAccessor_t<int16_t>(numComponents);
+        case 5123: return generateFromAccessor_t<uint16_t>(numComponents);
+        case 5124: return generateFromAccessor_t<int32_t>(numComponents);
+        case 5125: return generateFromAccessor_t<uint32_t>(numComponents);
+        case 5126: return generateFromAccessor_t<float>(numComponents);
+        case 5130: return generateFromAccessor_t<double>(numComponents);
+        default:
+            throw std::runtime_error("Not supported component type");
+    }
+}
 
 template<typename T>
 inline constexpr uint32_t getNumComponents()
@@ -104,6 +129,26 @@ inline size_t VertexAttributeCount(VertexAttribute_v const & v)
     {
         return arg.size();
     }, v);
+}
+
+/**
+ * @brief VertexAttributeMerge
+ * @param v
+ * @return
+ *
+ * Merges all the values from B into A, returns the size of A before the merge.
+ */
+inline size_t VertexAttributeMerge(VertexAttribute_v & A, VertexAttribute_v const & B)
+{
+    return std::visit( [&](auto && arg)
+    {
+        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
+
+        auto c = arg.size();
+        auto & b = std::get<V>(B);
+        arg.insert(arg.end(), b.begin(), b.end());
+        return c;
+    }, A);
 }
 
 /**
@@ -213,6 +258,13 @@ inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribut
 }
 
 
+struct DrawCall
+{
+    uint32_t indexCount   = 0;
+    uint32_t vertexCount  = 0;
+    int32_t  vertexOffset = 0;
+    int32_t  indexOffset  = 0;
+};
 
 /**
  * @brief The MeshPrimitive struct
@@ -260,6 +312,73 @@ struct MeshPrimitive
         size += VertexAttributeByteSize(INDEX);
 
         return size;
+    }
+
+    /**
+     * @brief isSimilar
+     * @param P
+     * @return
+     *
+     * Returns true if two mesh primitives are similar.
+     * Two mesh primitives are similar if they have the same attributes
+     * and their attribute have the same type
+     */
+    bool isSimilar( MeshPrimitive const & P) const
+    {
+        return
+            POSITION  .index() == P.POSITION   .index() &&
+            NORMAL    .index() == P.NORMAL     .index() &&
+            TANGENT   .index() == P.TANGENT    .index() &&
+            TEXCOORD_0.index() == P.TEXCOORD_0 .index() &&
+            TEXCOORD_1.index() == P.TEXCOORD_1 .index() &&
+            COLOR_0   .index() == P.COLOR_0    .index() &&
+            JOINTS_0  .index() == P.JOINTS_0   .index() &&
+            WEIGHTS_0 .index() == P.WEIGHTS_0  .index() &&
+            INDEX     .index() == P.INDEX      .index();
+    }
+
+    size_t indexCount() const
+    {
+        return VertexAttributeCount(INDEX);
+    }
+    size_t vertexCount() const
+    {
+        return VertexAttributeCount(POSITION);
+    }
+
+    DrawCall getDrawCall() const
+    {
+        DrawCall dc;
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(indexCount());
+        return dc;
+    }
+
+    DrawCall merge(MeshPrimitive const & P)
+    {
+        DrawCall dc;
+
+        dc.indexOffset  = static_cast<int32_t>(indexCount() );
+        dc.vertexOffset = static_cast<int32_t>(vertexCount());
+        dc.vertexCount = static_cast<uint32_t>(P.vertexCount());
+        dc.indexCount  = static_cast<uint32_t>(P.indexCount() );
+
+        if( isSimilar(P) )
+        {
+            VertexAttributeMerge(POSITION  , P.POSITION  );
+            VertexAttributeMerge(NORMAL    , P.NORMAL    );
+            VertexAttributeMerge(TANGENT   , P.TANGENT   );
+            VertexAttributeMerge(TEXCOORD_0, P.TEXCOORD_0);
+            VertexAttributeMerge(TEXCOORD_1, P.TEXCOORD_1);
+            VertexAttributeMerge(COLOR_0   , P.COLOR_0   );
+            VertexAttributeMerge(JOINTS_0  , P.JOINTS_0  );
+            VertexAttributeMerge(WEIGHTS_0 , P.WEIGHTS_0 );
+            VertexAttributeMerge(INDEX     , P.INDEX     );
+            return dc;
+        }
+        throw std::runtime_error("MeshPrimitives are not similar");
     }
 };
 
