@@ -257,6 +257,20 @@ inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribut
     return byteSize;
 }
 
+enum class Topology
+{
+    POINT_LIST                    = 0,
+    LINE_LIST                     = 1,
+    LINE_STRIP                    = 2,
+    TRIANGLE_LIST                 = 3,
+    TRIANGLE_STRIP                = 4,
+    TRIANGLE_FAN                  = 5,
+    LINE_LIST_WITH_ADJACENCY      = 6,
+    LINE_STRIP_WITH_ADJACENCY     = 7,
+    TRIANGLE_LIST_WITH_ADJACENCY  = 8,
+    TRIANGLE_STRIP_WITH_ADJACENCY = 9,
+    PATCH_LIST                    = 10,
+};
 
 struct DrawCall
 {
@@ -264,6 +278,7 @@ struct DrawCall
     uint32_t vertexCount  = 0;
     int32_t  vertexOffset = 0;
     int32_t  indexOffset  = 0;
+    Topology topology     = Topology::TRIANGLE_LIST;
 };
 
 /**
@@ -289,6 +304,24 @@ struct MeshPrimitive
 
     attribute_type INDEX      = std::vector<uint32_t>();
 
+    void clear()
+    {
+        for(auto * attr : {&POSITION  ,
+                           &NORMAL    ,
+                           &TANGENT   ,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0   ,
+                           &JOINTS_0  ,
+                           &WEIGHTS_0 ,
+                           &INDEX})
+        {
+            std::visit([](auto&& arg)
+            {
+                arg.clear();
+            }, *attr );
+        }
+    }
     /**
      * @brief calculateDeviceSize
      * @return
