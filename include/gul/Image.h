@@ -357,7 +357,7 @@ public:
     Image() : Image(8,8,4)
     {
     }
-    Image(uint32_t w) : Image(w,w,4)
+    explicit Image(uint32_t w) : Image(w,w,4)
     {
     }
     Image(uint32_t w, uint32_t h, uint32_t ch=4)
