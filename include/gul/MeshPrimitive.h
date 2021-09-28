@@ -302,7 +302,9 @@ struct MeshPrimitive
     attribute_type JOINTS_0   = std::vector<glm::u16vec4>();
     attribute_type WEIGHTS_0  = std::vector<glm::vec4>();
 
-    attribute_type INDEX      = std::vector<uint32_t>();
+    attribute_type INDEX    = std::vector<uint32_t>();
+
+    Topology       topology = Topology::TRIANGLE_LIST;
 
     void clear()
     {
@@ -386,6 +388,7 @@ struct MeshPrimitive
         dc.vertexOffset = static_cast<int32_t>(0);
         dc.vertexCount  = static_cast<uint32_t>(vertexCount());
         dc.indexCount   = static_cast<uint32_t>(indexCount());
+        dc.topology     = topology;
         return dc;
     }
 
@@ -484,7 +487,7 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
     using _uvec4 = glm::u8vec4;//std::array<uint8_t,4>;
 
     MeshPrimitive M;
-
+    M.topology = Topology::LINE_LIST;
     auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
     auto & C = std::get< std::vector<glm::u8vec4> >(M.COLOR_0);
 
