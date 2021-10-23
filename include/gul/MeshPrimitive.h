@@ -167,21 +167,40 @@ inline std::vector<size_t> VertexAttributeCopySequential(void * data, std::vecto
 {
     std::vector<size_t> offsets;
     size_t off=0;
+
     for(auto & v : V)
     {
-        offsets.push_back( off);
-        off += VertexAttributeByteSize(*v);
+        if(v)
+        {
+            auto count = VertexAttributeCount(*v);
+            if(count)
+            {
+                offsets.push_back( off);
+                off += VertexAttributeByteSize(*v);
+            }
+            else
+            {
+                offsets.push_back(0);
+            }
+        }
+        else
+        {
+            offsets.push_back(0);
+        }
     }
 
     auto dOut = static_cast<uint8_t*>(data);
     for(auto & v : V)
     {
-        std::visit( [&](auto && arg)
-                {
-                    using T = std::decay_t<decltype(arg)>;
-                    std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
-                    dOut += arg.size()*sizeof(typename T::value_type);
-                }, *v);
+        if( v != nullptr)
+        {
+            std::visit( [&](auto && arg)
+                    {
+                        using T = std::decay_t<decltype(arg)>;
+                        std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
+                        dOut += arg.size()*sizeof(typename T::value_type);
+                    }, *v);
+        }
     }
     return offsets;
 }
@@ -416,6 +435,35 @@ struct MeshPrimitive
         }
         throw std::runtime_error("MeshPrimitives are not similar");
     }
+
+    /**
+     * @brief copySequential
+     * @param data
+     * @return
+     *
+     * Copies all the vertex attributes sequentually into the provided buffer
+     * and returns the offsets of each attribute
+     *
+     * [p0,p1,p2,n0,n1,n2,t0,t1,t2...]
+     *
+     *
+     */
+    inline std::vector<size_t> copySequential(void * data) const
+    {
+        return VertexAttributeCopySequential(data,
+                                      {
+                                          &POSITION,
+                                          &NORMAL,
+                                          &TANGENT,
+                                          &TEXCOORD_0,
+                                          &TEXCOORD_1,
+                                          &COLOR_0,
+                                          &JOINTS_0,
+                                          &WEIGHTS_0,
+                                          &INDEX
+                                      });
+
+    }
 };
 
 inline MeshPrimitive Box(float dx , float dy , float dz )
@@ -478,6 +526,11 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
         I.push_back( j );
 
     return M;
+}
+
+inline MeshPrimitive Box(float dx )
+{
+    return Box(dx,dx,dx);
 }
 
 inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=5, int majorW=5, float lscale=1.0f, float wscale=1.0f)
