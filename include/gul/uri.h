@@ -123,7 +123,7 @@ struct uri
 
       scheme = match[1];
       std::transform(scheme.begin(), scheme.end(), scheme.begin(),
-          [](unsigned char c){ return std::tolower(c); });
+          [](auto const & c){ return static_cast<std::string::value_type>(std::tolower(c)); });
 
       std::string authorityAndPath(match[2].first, match[2].second);
       std::smatch authorityAndPathMatch;
