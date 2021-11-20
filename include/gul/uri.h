@@ -31,12 +31,26 @@ struct uri
         parse(str);
     }
 
+    explicit uri(const char *str)
+    {
+        parse(str);
+    }
+
     uri& operator=(const std::string & str)
     {
         parse(str);
         return *this;
     }
+    uri& operator=(const char * str)
+    {
+        parse(str);
+        return *this;
+    }
 
+    operator std::string() const
+    {
+        return toString();
+    }
     std::string toString() const
     {
         std::string out;
