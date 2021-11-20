@@ -97,18 +97,27 @@ SCENARIO("Copy Sequential with nullptr")
     GIVEN("Two vertex attributes")
     {
         gul::VertexAttribute_v V1  = std::vector<glm::uvec2>( {{1,2}, {3,4}});
-        gul::VertexAttribute_v V2  = std::vector<glm::uvec3>( {{5,6,7}, {8,9,10}});
-        gul::VertexAttribute_v V3  = std::vector<glm::uvec3>();
+        gul::VertexAttribute_v V2  = std::vector<glm::uvec3>();
+        gul::VertexAttribute_v V3  = std::vector<glm::uvec3>( {{5,6,7}, {8,9,10}});
 
-        WHEN("We copySequential with the two attributes")
+        WHEN("We copySequential with the three attributes, and one of them has zero attributes")
         {
             std::vector<uint32_t> D(100);
 
-            auto offsets = gul::VertexAttributeCopySequential(D.data(), {&V1, &V3, &V2});
+            auto offsets = gul::VertexAttributeCopySequential(D.data(), {&V1, &V2, &V3});
 
-            REQUIRE( offsets.size() == 3);
+            THEN("We get an offset vector of size 3")
+            {
+                REQUIRE( offsets.size() == 3);
+            }
+
             REQUIRE( offsets[0] == 0);
-            REQUIRE( offsets[1] == sizeof(glm::uvec2)*2);
+
+            THEN("The vertex with zero attributes has an offset of zero")
+            {
+                REQUIRE( offsets[1] == 0);
+            }
+
             REQUIRE( offsets[2] == sizeof(glm::uvec2)*2);
 
             THEN("Attribute vectors are copied as if they were appended")
