@@ -26,12 +26,12 @@ struct uri
     uri()
     {}
 
-    explicit uri(const std::string &str)
+    uri(const std::string &str)
     {
         parse(str);
     }
 
-    explicit uri(const char *str)
+    uri(const char *str)
     {
         parse(str);
     }
