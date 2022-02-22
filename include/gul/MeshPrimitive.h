@@ -132,6 +132,22 @@ inline size_t VertexAttributeCount(VertexAttribute_v const & v)
 }
 
 /**
+ * @brief attributeCount
+ * @param v
+ * @return
+ * Returns the number of attributes
+ */
+inline size_t VertexAttributeNumComponents(VertexAttribute_v const & v)
+{
+    return std::visit( [&](auto && arg)
+    {
+        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
+        using attr_type = typename V::value_type;
+        return getNumComponents<attr_type>();
+    }, v);
+}
+
+/**
  * @brief VertexAttributeMerge
  * @param v
  * @return
@@ -251,29 +267,31 @@ inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribut
     uint64_t stride=0;
 
     uint8_t * out = static_cast<uint8_t*>(data);
-    (void)out;
-
-    size_t S=0;
-    std::vector<size_t> offsets;
     size_t off=0;
+
+
     for(auto & v : V)
     {
-        stride += VertexAttributeSizeOf(*v);
-        S = std::min(S, VertexAttributeCount(*v) );
-        offsets.push_back( off);
-        off+=VertexAttributeSizeOf(*v);
+        auto attrCount = VertexAttributeCount(*v);
+        if(attrCount)
+        {
+            count = std::min(attrCount,count);
+            stride += VertexAttributeSizeOf(*v);
+        }
     }
 
-    count = std::min(count, VertexAttributeCount(*V.front()));
-
-    size_t last = startIndex + count;
-    last = std::min(last, VertexAttributeCount(*V.front()));
-
-    for(size_t i=startIndex;i<last;i++)
+    size_t offset = 0;
+    for(auto & v : V)
     {
-        VertexAttributeStrideCopy(out + offsets[i], *V[i], stride);
+        auto attrCount = VertexAttributeCount(*v);
+        if(attrCount)
+        {
+            VertexAttributeStrideCopy(out + offset, *v, stride);
+            offset += VertexAttributeSizeOf(*v);
+        }
     }
-    return byteSize;
+
+    return stride * count;
 }
 
 enum class Topology
@@ -463,6 +481,71 @@ struct MeshPrimitive
                                           &INDEX
                                       });
 
+    }
+    inline size_t copyVertexAttributesInterleaved(void * data) const
+    {
+        return VertexAttributeInterleaved(data,
+                                      {
+                                          &POSITION,
+                                          &NORMAL,
+                                          &TANGENT,
+                                          &TEXCOORD_0,
+                                          &TEXCOORD_1,
+                                          &COLOR_0,
+                                          &JOINTS_0,
+                                          &WEIGHTS_0,
+                                      });
+
+    }
+    inline size_t copyIndex(void * data) const
+    {
+        return VertexAttributeInterleaved(data,
+                                      {
+                                          &INDEX,
+                                      });
+
+    }
+    inline size_t calculateInterleavedStride() const
+    {
+        size_t stride = 0;
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if(count)
+            {
+
+                stride += gul::VertexAttributeSizeOf(*V);
+            }
+        }
+        return stride;
+    }
+    inline uint64_t calculateInterleavedBufferSize() const
+    {
+        size_t bufferSize = 0;
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if(count)
+            {
+
+                bufferSize += gul::VertexAttributeByteSize(*V);
+            }
+        }
+        return bufferSize;
     }
 };
 
