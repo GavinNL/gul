@@ -263,13 +263,13 @@ inline void VertexAttributeStrideCopy(void * start, VertexAttribute_v const &v, 
  */
 inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
 {
-    size_t byteSize=0;
+    //size_t byteSize=0;
     uint64_t stride=0;
 
     uint8_t * out = static_cast<uint8_t*>(data);
-    size_t off=0;
+    //size_t off=0;
 
-
+    (void)startIndex;
     for(auto & v : V)
     {
         auto attrCount = VertexAttributeCount(*v);
@@ -484,25 +484,48 @@ struct MeshPrimitive
     }
     inline size_t copyVertexAttributesInterleaved(void * data) const
     {
-        return VertexAttributeInterleaved(data,
-                                      {
-                                          &POSITION,
-                                          &NORMAL,
-                                          &TANGENT,
-                                          &TEXCOORD_0,
-                                          &TEXCOORD_1,
-                                          &COLOR_0,
-                                          &JOINTS_0,
-                                          &WEIGHTS_0,
-                                      });
+        size_t attrCount=0;
+        auto stride = calculateInterleavedStride();
+        uint8_t * offset = static_cast<uint8_t*>(data);
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if( count != 0)
+            {
+                VertexAttributeStrideCopy(offset, *V, stride);
+                offset += gul::VertexAttributeSizeOf(*V);
+                attrCount = std::max(count, attrCount);
+            }
+        }
+        return attrCount * stride;
+        //return VertexAttributeInterleaved(data,
+        //                              {
+        //                                  &POSITION,
+        //                                  &NORMAL,
+        //                                  &TANGENT,
+        //                                  &TEXCOORD_0,
+        //                                  &TEXCOORD_1,
+        //                                  &COLOR_0,
+        //                                  &JOINTS_0,
+        //                                  &WEIGHTS_0,
+        //                              });
 
     }
     inline size_t copyIndex(void * data) const
     {
-        return VertexAttributeInterleaved(data,
-                                      {
-                                          &INDEX,
-                                      });
+        return std::visit( [data](auto && arg)
+        {
+            using type_ = typename std::decay_t<decltype(arg)>::value_type;
+            std::memcpy(data, arg.data(), arg.size() * sizeof(type_));
+            return arg.size() * sizeof(type_);
+        }, INDEX);
 
     }
     inline size_t calculateInterleavedStride() const
@@ -520,7 +543,6 @@ struct MeshPrimitive
             auto count = gul::VertexAttributeCount(*V);
             if(count)
             {
-
                 stride += gul::VertexAttributeSizeOf(*V);
             }
         }
