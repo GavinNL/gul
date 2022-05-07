@@ -10,13 +10,12 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
-#include <iostream>
 
-#ifndef GNL_NAMESPACE
-    #define GNL_NAMESPACE gul
+#ifndef GUL_NAMESPACE
+    #define GUL_NAMESPACE gul
 #endif
 
-namespace gul
+namespace GUL_NAMESPACE
 {
 
 class thread_pool
