@@ -132,6 +132,22 @@ inline size_t VertexAttributeCount(VertexAttribute_v const & v)
 }
 
 /**
+ * @brief attributeCount
+ * @param v
+ * @return
+ * Returns the number of attributes
+ */
+inline size_t VertexAttributeNumComponents(VertexAttribute_v const & v)
+{
+    return std::visit( [&](auto && arg)
+    {
+        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
+        using attr_type = typename V::value_type;
+        return getNumComponents<attr_type>();
+    }, v);
+}
+
+/**
  * @brief VertexAttributeMerge
  * @param v
  * @return
@@ -167,21 +183,40 @@ inline std::vector<size_t> VertexAttributeCopySequential(void * data, std::vecto
 {
     std::vector<size_t> offsets;
     size_t off=0;
+
     for(auto & v : V)
     {
-        offsets.push_back( off);
-        off += VertexAttributeByteSize(*v);
+        if(v)
+        {
+            auto count = VertexAttributeCount(*v);
+            if(count)
+            {
+                offsets.push_back( off);
+                off += VertexAttributeByteSize(*v);
+            }
+            else
+            {
+                offsets.push_back(0);
+            }
+        }
+        else
+        {
+            offsets.push_back(0);
+        }
     }
 
     auto dOut = static_cast<uint8_t*>(data);
     for(auto & v : V)
     {
-        std::visit( [&](auto && arg)
-                {
-                    using T = std::decay_t<decltype(arg)>;
-                    std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
-                    dOut += arg.size()*sizeof(typename T::value_type);
-                }, *v);
+        if( v != nullptr)
+        {
+            std::visit( [&](auto && arg)
+                    {
+                        using T = std::decay_t<decltype(arg)>;
+                        std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
+                        dOut += arg.size()*sizeof(typename T::value_type);
+                    }, *v);
+        }
     }
     return offsets;
 }
@@ -228,33 +263,35 @@ inline void VertexAttributeStrideCopy(void * start, VertexAttribute_v const &v, 
  */
 inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
 {
-    size_t byteSize=0;
+    //size_t byteSize=0;
     uint64_t stride=0;
 
     uint8_t * out = static_cast<uint8_t*>(data);
-    (void)out;
+    //size_t off=0;
 
-    size_t S=0;
-    std::vector<size_t> offsets;
-    size_t off=0;
+    (void)startIndex;
     for(auto & v : V)
     {
-        stride += VertexAttributeSizeOf(*v);
-        S = std::min(S, VertexAttributeCount(*v) );
-        offsets.push_back( off);
-        off+=VertexAttributeSizeOf(*v);
+        auto attrCount = VertexAttributeCount(*v);
+        if(attrCount)
+        {
+            count = std::min(attrCount,count);
+            stride += VertexAttributeSizeOf(*v);
+        }
     }
 
-    count = std::min(count, VertexAttributeCount(*V.front()));
-
-    size_t last = startIndex + count;
-    last = std::min(last, VertexAttributeCount(*V.front()));
-
-    for(size_t i=startIndex;i<last;i++)
+    size_t offset = 0;
+    for(auto & v : V)
     {
-        VertexAttributeStrideCopy(out + offsets[i], *V[i], stride);
+        auto attrCount = VertexAttributeCount(*v);
+        if(attrCount)
+        {
+            VertexAttributeStrideCopy(out + offset, *v, stride);
+            offset += VertexAttributeSizeOf(*v);
+        }
     }
-    return byteSize;
+
+    return stride * count;
 }
 
 enum class Topology
@@ -416,6 +453,122 @@ struct MeshPrimitive
         }
         throw std::runtime_error("MeshPrimitives are not similar");
     }
+
+    /**
+     * @brief copySequential
+     * @param data
+     * @return
+     *
+     * Copies all the vertex attributes sequentually into the provided buffer
+     * and returns the offsets of each attribute
+     *
+     * [p0,p1,p2,n0,n1,n2,t0,t1,t2...]
+     *
+     *
+     */
+    inline std::vector<size_t> copySequential(void * data) const
+    {
+        return VertexAttributeCopySequential(data,
+                                      {
+                                          &POSITION,
+                                          &NORMAL,
+                                          &TANGENT,
+                                          &TEXCOORD_0,
+                                          &TEXCOORD_1,
+                                          &COLOR_0,
+                                          &JOINTS_0,
+                                          &WEIGHTS_0,
+                                          &INDEX
+                                      });
+
+    }
+    inline size_t copyVertexAttributesInterleaved(void * data) const
+    {
+        size_t attrCount=0;
+        auto stride = calculateInterleavedStride();
+        uint8_t * offset = static_cast<uint8_t*>(data);
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if( count != 0)
+            {
+                VertexAttributeStrideCopy(offset, *V, stride);
+                offset += gul::VertexAttributeSizeOf(*V);
+                attrCount = std::max(count, attrCount);
+            }
+        }
+        return attrCount * stride;
+        //return VertexAttributeInterleaved(data,
+        //                              {
+        //                                  &POSITION,
+        //                                  &NORMAL,
+        //                                  &TANGENT,
+        //                                  &TEXCOORD_0,
+        //                                  &TEXCOORD_1,
+        //                                  &COLOR_0,
+        //                                  &JOINTS_0,
+        //                                  &WEIGHTS_0,
+        //                              });
+
+    }
+    inline size_t copyIndex(void * data) const
+    {
+        return std::visit( [data](auto && arg)
+        {
+            using type_ = typename std::decay_t<decltype(arg)>::value_type;
+            std::memcpy(data, arg.data(), arg.size() * sizeof(type_));
+            return arg.size() * sizeof(type_);
+        }, INDEX);
+
+    }
+    inline size_t calculateInterleavedStride() const
+    {
+        size_t stride = 0;
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if(count)
+            {
+                stride += gul::VertexAttributeSizeOf(*V);
+            }
+        }
+        return stride;
+    }
+    inline uint64_t calculateInterleavedBufferSize() const
+    {
+        size_t bufferSize = 0;
+        for(auto & V : { &POSITION,
+                         &NORMAL,
+                         &TANGENT,
+                         &TEXCOORD_0,
+                         &TEXCOORD_1,
+                         &COLOR_0,
+                         &JOINTS_0,
+                         &WEIGHTS_0})
+        {
+            auto count = gul::VertexAttributeCount(*V);
+            if(count)
+            {
+
+                bufferSize += gul::VertexAttributeByteSize(*V);
+            }
+        }
+        return bufferSize;
+    }
 };
 
 inline MeshPrimitive Box(float dx , float dy , float dz )
@@ -478,6 +631,11 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
         I.push_back( j );
 
     return M;
+}
+
+inline MeshPrimitive Box(float dx )
+{
+    return Box(dx,dx,dx);
 }
 
 inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=5, int majorW=5, float lscale=1.0f, float wscale=1.0f)

@@ -37,6 +37,10 @@ function(set_project_warnings project_name)
       /w14928 # illegal copy-initialization; more than one user-defined
               # conversion has been implicitly applied
 
+      # Disable the following errors
+      /wd4101
+      /wd4201
+
   )
 
   set(CLANG_WARNINGS

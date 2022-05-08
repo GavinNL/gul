@@ -425,7 +425,7 @@ public:
 
     void _setChannels(uint32_t width, uint32_t height, uint32_t channels)
     {
-        assert( channels <= 4 && channels >= 1);
+        //assert( channels <= 4 && channels >= 1);
         m_channels = channels;
         m_width = width;
         m_height = height;
@@ -573,6 +573,15 @@ public:
     uint32_t getChannels() const
     {
         return m_channels;
+    }
+
+    void clear()
+    {
+        m_data.clear();
+        m_channels = 0;
+        m_width  = 0;
+        m_height = 0;
+        _setChannels(0,0,0);
     }
 public:
 
