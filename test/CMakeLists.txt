@@ -71,6 +71,10 @@ foreach(file ${files})
                                     CONAN_PKG::stb)
 
 
+    target_compile_definitions(${EXE_NAME}
+                               PRIVATE
+                                   CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
     add_test(  NAME    ${TEST_NAME}
                COMMAND ${exeCmd}
             )
