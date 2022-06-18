@@ -9,6 +9,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <map>
 #include <glm/glm.hpp>
 
 namespace gul
@@ -571,6 +572,48 @@ struct MeshPrimitive
             }
         }
         return bufferSize;
+    }
+
+    void fuseVertices()
+    {
+        std::map< std::tuple<int32_t, int32_t, int32_t>, uint32_t> posToIndex;
+
+        auto & _POS = std::get< std::vector<glm::vec3> >(POSITION);
+        auto & _NOR = std::get< std::vector<glm::vec3> >(NORMAL);
+        auto & _UV = std::get< std::vector<glm::vec2> >(TEXCOORD_0);
+
+        auto & _INDEX = std::get< std::vector<uint32_t> >(INDEX);
+
+        std::vector<glm::vec3> NEW_POS;
+        std::vector<glm::vec3> NEW_NOR;
+        std::vector<glm::vec2> NEW_UV;
+
+        uint32_t index = 0;
+        uint32_t j=0;
+        for(auto & p : _POS)
+        {
+            glm::ivec3 P( p*100.0f );
+            if( posToIndex.insert( { {P.x, P.y, P.z}, index }).second)
+            {
+                NEW_POS.push_back(p);
+                NEW_NOR.push_back(_NOR[j]);
+                NEW_UV.push_back(_UV[j]);
+                index++;
+            }
+            j++;
+        }
+
+        std::vector<uint32_t> newINDEX;
+        for(auto i : _INDEX)
+        {
+            auto & p = _POS[i];
+            glm::ivec3 P( p*100.0f );
+            newINDEX.push_back( posToIndex[{P.x,P.y,P.z}]);
+        }
+        INDEX = std::move(newINDEX);
+        POSITION = std::move(NEW_POS);
+        NORMAL = std::move(NEW_NOR);
+        TEXCOORD_0= std::move(NEW_UV);
     }
 };
 
