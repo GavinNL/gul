@@ -6,6 +6,9 @@
 #include <array>
 #include <cstring>
 #include <tuple>
+#include <string>
+#include <fstream>
+#include <sstream>
 #include <glm/glm.hpp>
 
 namespace gul
@@ -795,7 +798,192 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
     return M;
 }
 
+inline MeshPrimitive ReadOBJ(std::ifstream & in)
+{
+    std::vector< glm::vec3 > position;
+    std::vector< glm::vec3 > normal;
+    std::vector< glm::vec2 > uv;
 
+    struct faceIndex
+    {
+        uint32_t p=0;
+        uint32_t t=0;
+        uint32_t n=0;
+    };
+
+    std::vector< faceIndex > quads;
+    std::vector< faceIndex > tris;
+
+    auto split = [](std::string s, std::string delimiter)
+    {
+        using namespace std;
+        size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+        string token;
+        vector<string> res;
+
+        while ((pos_end = s.find (delimiter, pos_start)) != string::npos) {
+            token = s.substr (pos_start, pos_end - pos_start);
+            pos_start = pos_end + delim_len;
+            res.push_back (token);
+        }
+
+        res.push_back (s.substr (pos_start));
+        return res;
+    };
+
+    auto getFace = [&](std::string s) -> faceIndex
+    {
+        faceIndex F;
+        auto S = split(s, "/");
+        if(S.size() == 3)
+        {
+            F.p = std::stoi( S[0] );
+            if( S[1].size() != 0)
+                F.t = std::stoi(S[1]);
+            if( S[2].size() != 0)
+                F.n = std::stoi(S[2]);
+
+            return F;
+        }
+        return F;
+    };
+
+    while(!in.eof())
+    {
+        std::string line;
+        std::string fullLine;
+        std::getline(in, fullLine);
+
+        std::istringstream ins(fullLine);
+
+        ins >> line;
+        if(line == "v")
+        {
+            glm::vec3 p;
+            ins  >> p.x;
+            ins  >> p.y;
+            ins  >> p.z;
+            position.push_back(p);
+        }
+        else if(line == "vn")
+        {
+            glm::vec3 p;
+            ins  >> p.x;
+            ins  >> p.y;
+            ins  >> p.z;
+            normal.push_back(p);
+        }
+        else if(line == "vt")
+        {
+            glm::vec2 p;
+            ins  >> p.x;
+            ins  >> p.y;
+            uv.push_back(p);
+        }
+        else if(line == "f")
+        {
+            std::string faceLine;
+
+            if(fullLine.front() == 'f')
+            {
+                faceLine = fullLine.substr(2);
+            }
+            auto sp = split(faceLine, " ");
+
+            if(sp.size() == 4)
+            {
+                for(auto & v : sp)
+                {
+                    faceIndex Fa = getFace(v);
+                    quads.push_back(Fa);
+                }
+            }
+            if(sp.size() == 3)
+            {
+                for(auto & v : sp)
+                {
+                    faceIndex Fa = getFace(v);
+                    tris.push_back(Fa);
+                }
+            }
+            //std::cout << faceLine << std::endl;
+        }
+        else
+        {
+            //std::string bah;
+            //std::getline(in, bah);
+          //  std::cout << line << std::endl;
+        }
+    }
+
+
+    gul::MeshPrimitive M;
+
+    std::vector<glm::vec3> POSITION;
+    std::vector<glm::vec2> TEXCOORD;
+    std::vector<glm::vec3> NORMAL;
+    std::vector<uint32_t> INDEX;
+
+    for(size_t i=0;i<tris.size(); i+= 3)
+    {
+        auto & I1 = tris[i];
+        auto & I2 = tris[i+1];
+        auto & I3 = tris[i+2];
+
+        POSITION.push_back(position[I1.p-1]);
+        POSITION.push_back(position[I2.p-1]);
+        POSITION.push_back(position[I3.p-1]);
+
+        NORMAL.push_back(normal[I1.n-1]);
+        NORMAL.push_back(normal[I2.n-1]);
+        NORMAL.push_back(normal[I3.n-1]);
+
+        TEXCOORD.push_back(uv[I1.t-1]);
+        TEXCOORD.push_back(uv[I2.t-1]);
+        TEXCOORD.push_back(uv[I3.t-1]);
+    }
+
+    for(size_t i=0;i<quads.size(); i+= 4)
+    {
+        auto & I1 = quads[i];
+        auto & I2 = quads[i+1];
+        auto & I3 = quads[i+2];
+        auto & I4 = quads[i+3];
+
+        POSITION.push_back(position[I1.p - 1]);
+        POSITION.push_back(position[I2.p - 1]);
+        POSITION.push_back(position[I3.p - 1]);
+        POSITION.push_back(position[I1.p - 1]);
+        POSITION.push_back(position[I3.p - 1]);
+        POSITION.push_back(position[I4.p - 1]);
+
+        NORMAL.push_back(normal[I1.n - 1] );
+        NORMAL.push_back(normal[I2.n - 1] );
+        NORMAL.push_back(normal[I3.n - 1] );
+        NORMAL.push_back(normal[I1.n - 1] );
+        NORMAL.push_back(normal[I3.n - 1] );
+        NORMAL.push_back(normal[I4.n - 1] );
+
+        TEXCOORD.push_back(uv[I1.t - 1] );
+        TEXCOORD.push_back(uv[I2.t - 1] );
+        TEXCOORD.push_back(uv[I3.t - 1] );
+        TEXCOORD.push_back(uv[I1.t - 1] );
+        TEXCOORD.push_back(uv[I3.t - 1] );
+        TEXCOORD.push_back(uv[I4.t - 1] );
+    }
+    uint32_t i=0;
+    for(auto & x : POSITION)
+    {
+        INDEX.push_back(i++);
+    }
+
+    M.POSITION = std::move(POSITION);
+    M.NORMAL = std::move(NORMAL);
+    M.TEXCOORD_0 = std::move(TEXCOORD);
+    M.INDEX = std::move(INDEX);
+
+    return M;
+}
 
 }
 
