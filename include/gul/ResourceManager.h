@@ -5,9 +5,21 @@
 #include <filesystem>
 #include <chrono>
 #include <typeindex>
+#include <mutex>
+#include <optional>
 
 namespace gul
 {
+
+
+template <typename TP>
+inline std::time_t to_time_t(TP tp)
+{
+    using namespace std::chrono;
+    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now()
+              + system_clock::now());
+    return system_clock::to_time_t(sctp);
+}
 
 template<typename T>
 struct SingleResourceManager;
@@ -27,6 +39,13 @@ struct Resource_t
         return uri;
     }
 
+    /**
+     * @brief isLoaded
+     * @return
+     *
+     * Returns true if the resource has been loaded and is
+     * available through get();
+     */
     bool isLoaded() const
     {
         return value.has_value();
@@ -40,9 +59,21 @@ struct Resource_t
      */
     void emplace_resource(T && v)
     {
-        std::unique_lock L(*m_mutex);
+        auto L = getLockGuard();
         value = std::move(v);
-        m_loadTime = std::chrono::system_clock::now();
+        updateLoadTime();
+        setIsLoading(false);
+    }
+
+    /**
+     * @brief updateLoadTime
+     * @param loadTime
+     *
+     * Updates the load time of the current resource
+     */
+    void updateLoadTime(std::chrono::system_clock::time_point loadTime = std::chrono::system_clock::now())
+    {
+        m_loadTime = loadTime;
     }
 
     /**
@@ -50,17 +81,79 @@ struct Resource_t
      * @return
      *
      * Loads the resource and returns true if the resource was loaded
-     * and false if the resource has already been loaded
+     * and false if the resource has already been loaded.
+     *
+     * This function should be called on the main thread.
+     *
      */
     bool load()
     {
         if(!value.has_value())
         {
-            auto v = (*m_loader)(uri);
-            emplace_resource( std::move(v) );
+            auto f = getBackgroundLoader();
+            f(); // call it on the same thread
             return true;
         }
         return false;
+    }
+
+    /**
+     * @brief isLoading
+     * @return
+     *
+     * Returns if the resource is currently scheduled
+     * or loading in the background.
+     */
+    bool isLoading() const
+    {
+        return m_isBackgroundLoading;
+    }
+
+    void setIsLoading(bool t)
+    {
+        m_isBackgroundLoading = t;
+    }
+
+    /**
+     * @brief loadBackground
+     *
+     * gets a functional object which can be called on a different thread
+     * do load the resource in the background.
+     */
+    auto getBackgroundLoader()
+    {
+        return
+        [this]()
+        {
+            {
+                std::lock_guard<std::mutex> L(*this->m_mutex);
+                this->m_isBackgroundLoading = true;
+            }
+
+            auto v = (*m_loader)(uri);
+            emplace_resource( std::move(v) );
+
+            {
+                std::lock_guard<std::mutex> L(*this->m_mutex);
+                this->m_isBackgroundLoading = false;
+            }
+        };
+    }
+
+    /**
+     * @brief loadCopy
+     *
+     * Call the loader function and return a copy of the object
+     * that was loaded. This does not modify the resource
+     */
+    auto loadCopy() const
+    {
+        return (*m_loader)(uri);
+    }
+
+    std::lock_guard<std::mutex> getLockGuard()
+    {
+        return std::lock_guard<std::mutex>(*this->m_mutex);
     }
 
     auto getLoadTime() const
@@ -68,6 +161,22 @@ struct Resource_t
         return m_loadTime;
     }
 
+    auto getLoadTime_time_t() const
+    {
+        return to_time_t(getLoadTime());
+    }
+
+
+    /**
+     * @brief scheduleUnload
+     *
+     * Sets the flag to unload the resource at a later time
+     *
+     */
+    void scheduleUnload()
+    {
+        m_unloadLater = true;
+    }
     /**
      * @brief get
      * @return
@@ -94,13 +203,23 @@ protected:
     std::shared_ptr<std::function<T(gul::uri const &C)>> m_loader;
     std::chrono::system_clock::time_point                m_loadTime;
     std::shared_ptr<std::mutex>                          m_mutex;
-    bool m_dirty = true;
+
+    bool m_unloadLater         = false;
+    bool m_dirty               = true;
+    bool m_isBackgroundLoading = false;
+
     friend class SingleResourceManager<T>;
 };
 
 template<typename T>
 using ResourceID = std::shared_ptr<Resource_t<T>>;
 
+
+/**
+ * @brief The SingleResourceManager struct
+ *
+ * Manages a single resource type
+ */
 template<typename T>
 struct SingleResourceManager
 {
@@ -118,7 +237,7 @@ struct SingleResourceManager
      */
     resource_handle findResource(gul::uri const & uri)
     {
-        std::unique_lock L(m_mutex);
+        std::lock_guard<std::mutex> L(*m_mutex);
         auto &r = m_resources[uri.toString()];
         if(!r)
         {
@@ -170,6 +289,24 @@ struct SingleResourceManager
         }
     }
 
+    /**
+     * @brief processUnload
+     *
+     * Checks if any resources can be unloaded
+     */
+    void processUnload()
+    {
+        for(auto & [a,b] : m_resources)
+        {
+            if(b->m_unloadLater)
+            {
+                b->value.reset();
+                b->m_unloadLater = false;
+            }
+        }
+    }
+
+
 protected:
     using loader_function = std::function<T(gul::uri const &)>;
     using unloader_function = std::function<void(resource_handle)>;
@@ -182,6 +319,19 @@ protected:
 class ResourceManager
 {
 public:
+    static auto getFileModifyTime_time_t(std::filesystem::path const & p)
+    {
+        std::filesystem::file_time_type file_time = std::filesystem::last_write_time(p);
+        return to_time_t(file_time);
+    }
+
+    /**
+     * @brief get
+     * @param _uri
+     * @return
+     *
+     * Returns a specifc resource. The resource will be loaded if it hasn't already been
+     */
     template<typename T>
     ResourceID<T> get(gul::uri const & _uri)
     {
@@ -189,12 +339,30 @@ public:
         return l->get(_uri);
     }
 
+    /**
+     * @brief findResource
+     * @param u
+     * @return
+     *
+     * Finds a specific resource. The resource may or may not be loaded.
+     */
     template<typename T>
     typename SingleResourceManager<T>::resource_handle findResource(gul::uri const & u)
     {
         auto l = getSingleResourceManager<T>();
         return l->findResource(u);
     }
+
+    /**
+     * @brief setLoader
+     * @param C
+     *
+     * Sets the resource loader for a particular resource.
+     *
+     * The functional should have the form:
+     *
+     *     T (gul::uri const & _uri)
+     */
     template<typename T, typename callable_t>
     void setLoader(callable_t && C)
     {
@@ -202,6 +370,7 @@ public:
         l->setLoader(C);
     }
 
+protected:
     template<typename T>
     std::shared_ptr< SingleResourceManager<T> > getSingleResourceManager()
     {
