@@ -486,6 +486,7 @@ struct MeshPrimitive
                                       });
 
     }
+
     inline size_t copyVertexAttributesInterleaved(void * data) const
     {
         size_t attrCount=0;
@@ -522,6 +523,7 @@ struct MeshPrimitive
         //                              });
 
     }
+
     inline size_t copyIndex(void * data) const
     {
         return std::visit( [data](auto && arg)
@@ -532,6 +534,7 @@ struct MeshPrimitive
         }, INDEX);
 
     }
+
     inline size_t calculateInterleavedStride() const
     {
         size_t stride = 0;
@@ -552,6 +555,7 @@ struct MeshPrimitive
         }
         return stride;
     }
+
     inline uint64_t calculateInterleavedBufferSize() const
     {
         size_t bufferSize = 0;
@@ -574,6 +578,11 @@ struct MeshPrimitive
         return bufferSize;
     }
 
+    /**
+     * @brief fuseVertices
+     *
+     * Fuse near by vertices. This may not be accurate
+     */
     void fuseVertices()
     {
         std::map< std::tuple<int32_t, int32_t, int32_t>, uint32_t> posToIndex;
@@ -616,6 +625,32 @@ struct MeshPrimitive
         POSITION = std::move(NEW_POS);
         NORMAL = std::move(NEW_NOR);
         TEXCOORD_0= std::move(NEW_UV);
+    }
+
+    void rebuildNormals()
+    {
+        if( std::holds_alternative< std::vector<uint32_t> >(INDEX))
+        {
+            auto & I = std::get< std::vector<uint32_t > >(INDEX);
+            auto & P = std::get< std::vector<glm::vec3> >(POSITION);
+            std::vector< glm::vec3 > normals(P.size(), glm::vec3(0,0,0));
+
+            for(size_t i=0;i<I.size();i+=3)
+            {
+                auto v1 = P[i+1] - P[i];
+                auto v2 = P[i+2] - P[i];
+                auto n = glm::cross(v1,v2);
+
+                normals[i] += n;
+                normals[i+1] += n;
+                normals[i+2] += n;
+            }
+            for(auto & n : normals)
+            {
+                n = glm::normalize(n);
+            }
+            NORMAL = std::move(normals);
+        }
     }
 };
 
@@ -1034,9 +1069,17 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
     }
 
     M.POSITION = std::move(POSITION);
-    M.NORMAL = std::move(NORMAL);
-    M.TEXCOORD_0 = std::move(TEXCOORD);
     M.INDEX = std::move(INDEX);
+
+    if(NORMAL.size() == 0)
+    {
+        M.rebuildNormals();
+    }
+    else
+    {
+        M.NORMAL = std::move(NORMAL);
+    }
+    M.TEXCOORD_0 = std::move(TEXCOORD);
 
     return M;
 }
