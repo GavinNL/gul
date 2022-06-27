@@ -596,8 +596,10 @@ struct MeshPrimitive
             if( posToIndex.insert( { {P.x, P.y, P.z}, index }).second)
             {
                 NEW_POS.push_back(p);
-                NEW_NOR.push_back(_NOR[j]);
-                NEW_UV.push_back(_UV[j]);
+                if(!_NOR.empty())
+                    NEW_NOR.push_back(_NOR[j]);
+                if(!_UV.empty())
+                    NEW_UV.push_back(_UV[j]);
                 index++;
             }
             j++;
@@ -880,13 +882,17 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
         auto S = split(s, "/");
         if(S.size() == 3)
         {
-            F.p = std::stoi( S[0] );
+            F.p = static_cast<uint32_t>(std::stoi( S[0] ));
             if( S[1].size() != 0)
-                F.t = std::stoi(S[1]);
+                F.t =  static_cast<uint32_t>(std::stoi(S[1]));
             if( S[2].size() != 0)
-                F.n = std::stoi(S[2]);
+                F.n =  static_cast<uint32_t>(std::stoi(S[2]));
 
             return F;
+        }
+        else if(S.size() == 1)
+        {
+            F.p = static_cast<uint32_t>(std::stoi( S[0] ));
         }
         return F;
     };
@@ -977,13 +983,19 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
         POSITION.push_back(position[I2.p-1]);
         POSITION.push_back(position[I3.p-1]);
 
-        NORMAL.push_back(normal[I1.n-1]);
-        NORMAL.push_back(normal[I2.n-1]);
-        NORMAL.push_back(normal[I3.n-1]);
+        if(I1.n*I2.n*I3.n > 0 )
+        {
+            NORMAL.push_back(normal[I1.n-1]);
+            NORMAL.push_back(normal[I2.n-1]);
+            NORMAL.push_back(normal[I3.n-1]);
+        }
 
-        TEXCOORD.push_back(uv[I1.t-1]);
-        TEXCOORD.push_back(uv[I2.t-1]);
-        TEXCOORD.push_back(uv[I3.t-1]);
+        if(I1.t*I2.t*I3.t > 0 )
+        {
+            TEXCOORD.push_back(uv[I1.t-1]);
+            TEXCOORD.push_back(uv[I2.t-1]);
+            TEXCOORD.push_back(uv[I3.t-1]);
+        }
     }
 
     for(size_t i=0;i<quads.size(); i+= 4)
@@ -1017,6 +1029,7 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
     uint32_t i=0;
     for(auto & x : POSITION)
     {
+        (void)x;
         INDEX.push_back(i++);
     }
 

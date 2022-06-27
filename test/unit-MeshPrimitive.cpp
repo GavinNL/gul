@@ -138,3 +138,10 @@ SCENARIO("Copy Sequential with nullptr")
     }
 }
 
+SCENARIO("Load obj")
+{
+    std::ifstream in(CMAKE_SOURCE_DIR "/test/data/test.obj");
+    auto M = gul::ReadOBJ(in);
+
+    REQUIRE(M.indexCount() == 3);
+}
