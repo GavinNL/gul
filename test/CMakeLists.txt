@@ -39,6 +39,7 @@ string(REPLACE " " "_" folder_name ${folder_name})
 
 enable_testing()
 
+find_package(Threads REQUIRED)
 
 file(GLOB files "unit-*.cpp")
 foreach(file ${files})
@@ -67,6 +68,7 @@ foreach(file ${files})
                                 PRIVATE
                                     ${PROJECT_NAME}-catchmain
                                     ${PROJECT_NAME}
+                                    Threads::Threads
                                     CONAN_PKG::glm
                                     CONAN_PKG::stb)
 

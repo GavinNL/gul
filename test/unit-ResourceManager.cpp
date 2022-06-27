@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <gul/ResourceManager.h>
+#include <thread>
 
 struct TextResource
 {
@@ -11,7 +12,6 @@ struct IntResource
 {
     uint64_t data = 0;
 };
-
 SCENARIO("Test")
 {
     using namespace gul;
@@ -59,8 +59,60 @@ SCENARIO("Test")
             REQUIRE( G.data.size() > 0);
         }
     }
+
 }
 
+SCENARIO("Background loading")
+{
+    using namespace gul;
+
+    SingleResourceManager<TextResource> RM;
+
+    const auto RES_URI = uri("file://" CMAKE_SOURCE_DIR "/README.md");
+
+    auto rId = RM.findResource( RES_URI);
+
+    REQUIRE( !rId->isLoaded() );
+    REQUIRE( rId->getUri().toString() == RES_URI.toString());
+
+    RM.setLoader([](uri const & _uri)
+    {
+        std::ifstream t(_uri.path);
+        TextResource R;
+        R.data = std::string((std::istreambuf_iterator<char>(t)),
+                              std::istreambuf_iterator<char>());
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        return R;
+    });
+
+    THEN("We can check if the resources is loaded")
+    {
+        REQUIRE( !rId->isLoaded() );
+        REQUIRE( !rId->isLoading() ); // not loding in teh background
+
+        std::thread th(rId->getBackgroundLoader() );
+
+        // wait a few moments so that the thread can actually start up
+        std::this_thread::sleep_for( std::chrono::milliseconds(16));
+
+        // loading in the background
+        REQUIRE(rId->isLoading());
+
+        // wait until its finished loading
+        while( !rId->isLoaded())
+        {
+            std::this_thread::sleep_for( std::chrono::milliseconds(16));
+        }
+
+        th.join();
+
+        // data should be fully loaded now
+        REQUIRE( rId->isLoaded() );
+        REQUIRE( !rId->isLoading());
+
+        REQUIRE( rId->get().data.size() > 0);
+    }
+}
 
 SCENARIO("Resource Manager")
 {

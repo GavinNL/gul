@@ -7,6 +7,7 @@
 #include <typeindex>
 #include <mutex>
 #include <optional>
+#include <atomic>
 
 namespace gul
 {
@@ -111,7 +112,7 @@ struct Resource_t
 
     void setIsLoading(bool t)
     {
-        m_isBackgroundLoading = t;
+        m_isBackgroundLoading.store(t);
     }
 
     /**
@@ -125,18 +126,12 @@ struct Resource_t
         return
         [this]()
         {
-            {
-                std::lock_guard<std::mutex> L(*this->m_mutex);
-                this->m_isBackgroundLoading = true;
-            }
+            this->setIsLoading(true);
 
             auto v = (*m_loader)(uri);
             emplace_resource( std::move(v) );
 
-            {
-                std::lock_guard<std::mutex> L(*this->m_mutex);
-                this->m_isBackgroundLoading = false;
-            }
+            this->setIsLoading(false);
         };
     }
 
@@ -187,6 +182,10 @@ struct Resource_t
      */
     T & get()
     {
+        if(m_isBackgroundLoading)
+        {
+            throw std::runtime_error("Resource is currently loading in the background.");
+        }
         if(!value.has_value())
         {
             value = (*m_loader)(uri);
@@ -206,9 +205,9 @@ protected:
 
     bool m_unloadLater         = false;
     bool m_dirty               = true;
-    bool m_isBackgroundLoading = false;
+    std::atomic<bool> m_isBackgroundLoading = false;
 
-    friend class SingleResourceManager<T>;
+    friend struct SingleResourceManager<T>;
 };
 
 template<typename T>
@@ -306,6 +305,23 @@ struct SingleResourceManager
         }
     }
 
+    template<typename callable_t>
+    void forEach(callable_t &&  c)
+    {
+        for(auto & [a,b] : m_resources)
+        {
+            c(b);
+        }
+    }
+
+    auto begin()
+    {
+        return m_resources.begin();
+    }
+    auto end()
+    {
+        return m_resources.end();
+    }
 
 protected:
     using loader_function = std::function<T(gul::uri const &)>;
@@ -370,7 +386,6 @@ public:
         l->setLoader(C);
     }
 
-protected:
     template<typename T>
     std::shared_ptr< SingleResourceManager<T> > getSingleResourceManager()
     {
@@ -383,6 +398,7 @@ protected:
         }
         return std::static_pointer_cast< SingleResourceManager<T> >(f);
     }
+protected:
     std::map< std::type_index, std::shared_ptr<void> > m_singleResources;
 };
 
