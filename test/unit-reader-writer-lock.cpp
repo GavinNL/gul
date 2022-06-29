@@ -35,6 +35,7 @@ SCENARIO("TEST")
         {
 
             {
+                std::cout << "Readers Waiting: " << lock.get_reader_count() << std::endl;
                 std::unique_lock<RWLock> L(lock);
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(100+rand()%25));

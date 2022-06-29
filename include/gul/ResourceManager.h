@@ -2,12 +2,40 @@
 #define GUL_RESOURCE_MANAGER_H
 
 #include "uri.h"
-#include <filesystem>
 #include <chrono>
 #include <typeindex>
 #include <mutex>
 #include <optional>
 #include <atomic>
+
+
+// C++17 includes the <filesystem> library, but
+// unfortunately gcc7 does not have a finalized version of it
+// it is in the <experimental/filesystem lib
+// this section includes the proper header
+// depending on whether the header exists and
+// includes that. It also sets the
+// nfcbn::nf namespace
+#if __has_include(<filesystem>)
+
+    #include <filesystem>
+    namespace gul
+    {
+        namespace fs = std::filesystem;
+    }
+
+#elif __has_include(<experimental/filesystem>)
+
+    #include <experimental/filesystem>
+    namespace gul
+    {
+        namespace fs = std::experimental::filesystem;
+    }
+
+#else
+    #error There is no <filesystem> or <experimental/filesystem>
+#endif
+
 
 namespace gul
 {
@@ -335,9 +363,9 @@ protected:
 class ResourceManager
 {
 public:
-    static auto getFileModifyTime_time_t(std::filesystem::path const & p)
+    static auto getFileModifyTime_time_t(fs::path const & p)
     {
-        std::filesystem::file_time_type file_time = std::filesystem::last_write_time(p);
+        fs::file_time_type file_time = last_write_time(p);
         return to_time_t(file_time);
     }
 
