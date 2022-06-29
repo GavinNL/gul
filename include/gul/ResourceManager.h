@@ -312,6 +312,7 @@ struct SingleResourceManager
         *m_loader = C;
         for(auto & [a,b] : m_resources)
         {
+            (void)a;
             b->m_loader = m_loader;
         }
     }
@@ -325,6 +326,7 @@ struct SingleResourceManager
     {
         for(auto & [a,b] : m_resources)
         {
+            (void)a;
             if(b->m_unloadLater)
             {
                 b->value.reset();
