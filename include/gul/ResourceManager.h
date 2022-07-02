@@ -92,6 +92,7 @@ struct Resource_t
         value = std::move(v);
         updateLoadTime();
         setIsLoading(false);
+        m_dirty = false;
     }
 
     /**
@@ -100,9 +101,25 @@ struct Resource_t
      *
      * Updates the load time of the current resource
      */
-    void updateLoadTime(std::chrono::system_clock::time_point loadTime = std::chrono::system_clock::now())
+    void updateLoadTime(std::chrono::system_clock::time_point t = std::chrono::system_clock::now())
     {
-        m_loadTime = loadTime;
+        m_loadTime = t;
+    }
+
+    /**
+     * @brief updateAccessTime
+     * @param t
+     *
+     * Updates the resource's access time.
+     */
+    void updateAccessTime(std::chrono::system_clock::time_point t = std::chrono::system_clock::now())
+    {
+        m_accessTime = t;
+    }
+
+    auto getAccessTime() const
+    {
+        return m_accessTime;
     }
 
     /**
@@ -229,6 +246,7 @@ protected:
     gul::uri                                             uri;
     std::shared_ptr<std::function<T(gul::uri const &C)>> m_loader;
     std::chrono::system_clock::time_point                m_loadTime;
+    std::chrono::system_clock::time_point                m_accessTime; // the last time this resource was accessed
     std::shared_ptr<std::mutex>                          m_mutex;
 
     bool m_unloadLater         = false;
