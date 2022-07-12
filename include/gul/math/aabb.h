@@ -127,6 +127,14 @@ public:
         expand( p.upperBound);
     }
 
+    void scale(vec_type const & p)
+    {
+        auto W = (upperBound-lowerBound) * 0.5f;
+        auto M = computeCentre();
+        W *= p;
+        upperBound = M + W;
+        lowerBound = M - W;
+    }
 
     bool overlaps(const aabb_t & aabb, bool touchIsOverlap) const
     {

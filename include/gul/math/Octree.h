@@ -120,7 +120,7 @@ public:
             {
                 if(intersects(o.second,b))
                 {
-                    callable(*this);
+                    callable(o.first);
                 }
             }
             for(auto & c : children)
