@@ -1,7 +1,7 @@
-#ifndef GUL_MESH_PRIMITIVE_H
-#define GUL_MESH_PRIMITIVE_H
+#ifndef GUL_MESH_PRIMITIVE_2_H
+#define GUL_MESH_PRIMITIVE_2_H
 
-#include <variant>
+#include <cmath>
 #include <vector>
 #include <array>
 #include <cstring>
@@ -9,294 +9,164 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <cassert>
 #include <map>
-#include <glm/glm.hpp>
 
 namespace gul
 {
 
-#define _VECTYPES(_T) \
-std::vector< _T                             >, \
-std::vector< glm::vec<2, _T, glm::defaultp> >, \
-std::vector< glm::vec<3, _T, glm::defaultp> >, \
-std::vector< glm::vec<4, _T, glm::defaultp> >
 
-using VertexAttribute_v = std::variant<
-                            _VECTYPES(float) ,
-                            _VECTYPES(double) ,
-                            _VECTYPES(int32_t) ,
-                            _VECTYPES(uint32_t) ,
-                            _VECTYPES(int16_t) ,
-                            _VECTYPES(uint16_t) ,
-                            _VECTYPES(int8_t) ,
-                            _VECTYPES(uint8_t) ,
-
-                            std::vector< glm::mat3 >,
-                            std::vector< glm::mat4 >,
-                            std::vector< glm::dmat3 >,
-                            std::vector< glm::dmat4 >
-                    >;
-
-#undef _VECTYPES
-
-template<typename T>
-VertexAttribute_v generateFromAccessor_t(uint32_t numComponents)
+enum class eComponentType : uint32_t
 {
-    switch(numComponents)
+    BYTE           = 5120,
+    UNSIGNED_BYTE  = 5121,
+    SHORT          = 5122,
+    UNSIGNED_SHORT = 5123,
+    INT            = 5124,
+    UNSIGNED_INT   = 5125,
+    FLOAT          = 5126,
+    DOUBLE         = 5130
+};
+
+enum class eType : uint32_t
+{
+    UNKNOWN = 0,
+    SCALAR  = 1,
+    VEC2    = 2,
+    VEC3    = 3,
+    VEC4    = 4
+};
+
+
+struct VertexAttribute
+{
+    VertexAttribute()
     {
-        case 1: return std::vector< T >();
-            break;
-        case 2: return std::vector< glm::vec<2, T, glm::defaultp > >();
-            break;
-        case 3: return std::vector< glm::vec<3, T, glm::defaultp > >();
-            break;
-        case 4: return std::vector< glm::vec<4, T, glm::defaultp > >();
-            break;
-        default:
-            throw std::runtime_error("Not supported for vertex attributes");
+
     }
-}
-
-inline VertexAttribute_v generateFromGLTFAccessor(uint32_t GL_componentType, uint32_t numComponents)
-{
-    switch(GL_componentType)
+    VertexAttribute(eComponentType c, eType t)
     {
-        case 5120: return generateFromAccessor_t<int8_t>(numComponents);
-        case 5121: return generateFromAccessor_t<uint8_t>(numComponents);
-        case 5122: return generateFromAccessor_t<int16_t>(numComponents);
-        case 5123: return generateFromAccessor_t<uint16_t>(numComponents);
-        case 5124: return generateFromAccessor_t<int32_t>(numComponents);
-        case 5125: return generateFromAccessor_t<uint32_t>(numComponents);
-        case 5126: return generateFromAccessor_t<float>(numComponents);
-        case 5130: return generateFromAccessor_t<double>(numComponents);
-        default:
-            throw std::runtime_error("Not supported component type");
+        m_componentType = c;
+        m_type = t;
     }
-}
-
-template<typename T>
-inline constexpr uint32_t getNumComponents()
-{
-    if constexpr( std::is_fundamental<T>::value )
+    void init(eComponentType c, eType t)
     {
-        return 1u;
+        m_componentType = c;
+        m_type = t;
     }
-    else // glm type
+    template<typename T>
+    VertexAttribute& operator=(std::vector<T> const & v)
     {
-        return static_cast<uint32_t>(T::length());
+        m_data.resize( v.size() * sizeof(T));
+        std::memcpy(m_data.data(), v.data(), m_data.size());
+        return *this;
     }
-}
 
-/**
- * @brief byteSize
- * @param v
- * @return
- *
- * Returns the byte size of the entire attribute
- */
-inline uint64_t VertexAttributeByteSize(VertexAttribute_v const & v)
-{
-    return std::visit( [&](auto && arg)
+    /**
+     * @brief at
+     * @param i
+     * @return
+     *
+     * Returns the value of a component
+     */
+    template<typename T>
+    T at(size_t index, size_t componentIndex=0) const
     {
-        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-        using attr_type = typename V::value_type;
-        return arg.size() * sizeof(attr_type);
-    }, v);
-}
-
-/**
- * @brief attributeSize
- * @param v
- * @return
- *
- * Returns the size of the attribute array's value_type
- */
-inline size_t VertexAttributeSizeOf(VertexAttribute_v const & v)
-{
-    return std::visit( [&](auto && arg)
+        T v;
+        std::memcpy(&v, m_data.data() + index * getAttributeSize() + componentIndex * getComponentSizeOf(m_componentType), sizeof(T));
+        return v;
+    }
+    template<typename T>
+    void push_back(T const & v)
     {
-        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-        using attr_type = typename V::value_type;
-        return sizeof(attr_type);
-    }, v);
-}
+        auto m = m_data.size();
+        m_data.resize( m + sizeof(v));
+        std::memcpy( &m_data[m], &v, sizeof(v));
+    }
 
-/**
- * @brief attributeCount
- * @param v
- * @return
- * Returns the number of attributes
- */
-inline size_t VertexAttributeCount(VertexAttribute_v const & v)
-{
-    return std::visit( [&](auto && arg)
+    bool empty() const
     {
-        return arg.size();
-    }, v);
-}
-
-/**
- * @brief attributeCount
- * @param v
- * @return
- * Returns the number of attributes
- */
-inline size_t VertexAttributeNumComponents(VertexAttribute_v const & v)
-{
-    return std::visit( [&](auto && arg)
+        return m_data.empty();
+    }
+    eType getType() const
     {
-        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-        using attr_type = typename V::value_type;
-        return getNumComponents<attr_type>();
-    }, v);
-}
-
-/**
- * @brief VertexAttributeMerge
- * @param v
- * @return
- *
- * Merges all the values from B into A, returns the size of A before the merge.
- */
-inline size_t VertexAttributeMerge(VertexAttribute_v & A, VertexAttribute_v const & B)
-{
-    return std::visit( [&](auto && arg)
+        return m_type;
+    }
+    eComponentType getComponentType() const
     {
-        using V = std::decay_t<decltype(arg)>; //std::vector<attr_type>
-
-        auto c = arg.size();
-        auto & b = std::get<V>(B);
-        arg.insert(arg.end(), b.begin(), b.end());
-        return c;
-    }, A);
-}
-
-/**
- * @brief copySequential
- * @param data
- * @param V
- * @return
- *
- * Copies the attribute data sequentially
- * if given two attributes p and n,
- * the data is copied as follows
- *
- * p0,p1,p2,p3....n0,n1,n2,n3
- */
-inline std::vector<size_t> VertexAttributeCopySequential(void * data, std::vector<VertexAttribute_v const*> const & V)
-{
-    std::vector<size_t> offsets;
-    size_t off=0;
-
-    for(auto & v : V)
+        return m_componentType;
+    }
+    uint32_t getNumComponents() const
     {
-        if(v)
+        return static_cast<uint32_t>(m_type);
+    }
+
+    static uint32_t getComponentSizeOf(eComponentType c)
+    {
+        switch(c)
         {
-            auto count = VertexAttributeCount(*v);
-            if(count)
-            {
-                offsets.push_back( off);
-                off += VertexAttributeByteSize(*v);
-            }
-            else
-            {
-                offsets.push_back(0);
-            }
-        }
-        else
-        {
-            offsets.push_back(0);
+            case gul::eComponentType::BYTE:
+            case gul::eComponentType::UNSIGNED_BYTE: return 1;
+            case gul::eComponentType::SHORT:
+            case gul::eComponentType::UNSIGNED_SHORT: return 2;
+            case gul::eComponentType::INT:
+            case gul::eComponentType::UNSIGNED_INT:
+            case gul::eComponentType::FLOAT: return 4;
+            case gul::eComponentType::DOUBLE: return 8;
+            default:
+                return 0;
         }
     }
 
-    auto dOut = static_cast<uint8_t*>(data);
-    for(auto & v : V)
+    uint32_t getAttributeSize() const
     {
-        if( v != nullptr)
-        {
-            std::visit( [&](auto && arg)
-                    {
-                        using T = std::decay_t<decltype(arg)>;
-                        std::memcpy(dOut, arg.data(), arg.size()*sizeof(typename T::value_type));
-                        dOut += arg.size()*sizeof(typename T::value_type);
-                    }, *v);
-        }
+        return getComponentSizeOf(m_componentType) * getNumComponents();
     }
-    return offsets;
-}
 
-/**
- * @brief strideCopy
- * @param start
- * @param v
- * @param stride
- *
- * Performs a stride copy of the attribute's data
- *
- * stride should be at least as large as attributeSize(v), otherwise
- * data will be overwrritten.
- */
-inline void VertexAttributeStrideCopy(void * start, VertexAttribute_v const &v, size_t stride)
-{
-    return std::visit( [stride, start](auto && arg)
+    uint64_t getByteSize() const
     {
-        auto dOut = static_cast<uint8_t*>(start);
-        for(auto & a : arg)
-        {
-            std::memcpy(dOut, &a, sizeof(a));
-            dOut += stride;
-        }
-    }, v);
-}
+        return m_data.size();
+    }
 
-
-/**
- * @brief copyInterleaved
- * @param data
- * @param V
- * @param startIndex
- * @param count
- *
- * Copies the attribute data into the buffer but
- * interleaves each attribute.
- *
- * if given two attributes p and n,
- * the data is copied as follows
- *
- * p0,n0,p1,n1,p2,n2...
- */
-inline size_t VertexAttributeInterleaved(void * data, std::vector<VertexAttribute_v const*> const & V, size_t startIndex=0, size_t count=std::numeric_limits<size_t>::max())
-{
-    //size_t byteSize=0;
-    uint64_t stride=0;
-
-    uint8_t * out = static_cast<uint8_t*>(data);
-    //size_t off=0;
-
-    (void)startIndex;
-    for(auto & v : V)
+    uint64_t attributeCount() const
     {
-        auto attrCount = VertexAttributeCount(*v);
-        if(attrCount)
+        return m_data.size() / getAttributeSize();
+    }
+
+    bool canMerge(VertexAttribute const & B) const
+    {
+        return m_componentType == B.m_componentType && m_type == B.m_type;
+    }
+    uint64_t merge(VertexAttribute const& B)
+    {
+        auto s = m_data.size();
+        m_data.insert(m_data.end(), B.m_data.begin(), B.m_data.end());
+        return s;
+    }
+
+    void strideCopy(void * data, uint64_t stride) const
+    {
+        auto c = attributeCount();
+        auto s = getAttributeSize();
+
+        auto d_out = static_cast<uint8_t*>(data);
+        for(uint64_t i=0;i<c;i++)
         {
-            count = std::min(attrCount,count);
-            stride += VertexAttributeSizeOf(*v);
+            std::memcpy(d_out, &m_data[i], s);
+            d_out += stride;
         }
     }
 
-    size_t offset = 0;
-    for(auto & v : V)
+    void clear()
     {
-        auto attrCount = VertexAttributeCount(*v);
-        if(attrCount)
-        {
-            VertexAttributeStrideCopy(out + offset, *v, stride);
-            offset += VertexAttributeSizeOf(*v);
-        }
+        m_data.clear();
     }
 
-    return stride * count;
-}
+    std::vector<uint8_t> m_data;
+    eComponentType       m_componentType;
+    eType                m_type;
+};
+
 
 enum class Topology
 {
@@ -332,18 +202,18 @@ struct DrawCall
  */
 struct MeshPrimitive
 {
-    using attribute_type = VertexAttribute_v;
+    using attribute_type = VertexAttribute;
 
-    attribute_type POSITION   = std::vector<glm::vec3>  ();
-    attribute_type NORMAL     = std::vector<glm::vec3>  ();
-    attribute_type TANGENT    = std::vector<glm::vec3>  ();
-    attribute_type TEXCOORD_0 = std::vector<glm::vec2>  ();
-    attribute_type TEXCOORD_1 = std::vector<glm::vec2>  ();
-    attribute_type COLOR_0    = std::vector<glm::u8vec4>();
-    attribute_type JOINTS_0   = std::vector<glm::u16vec4>();
-    attribute_type WEIGHTS_0  = std::vector<glm::vec4>();
+    attribute_type POSITION   = attribute_type(eComponentType::FLOAT, eType::VEC3);//std::vector<glm::vec3>  ();
+    attribute_type NORMAL     = attribute_type(eComponentType::FLOAT, eType::VEC3);//std::vector<glm::vec3>  ();
+    attribute_type TANGENT    = attribute_type(eComponentType::FLOAT, eType::VEC4);//std::vector<glm::vec3>  ();
+    attribute_type TEXCOORD_0 = attribute_type(eComponentType::FLOAT, eType::VEC2);//std::vector<glm::vec2>  ();
+    attribute_type TEXCOORD_1 = attribute_type(eComponentType::FLOAT, eType::VEC2);//std::vector<glm::vec2>  ();
+    attribute_type COLOR_0    = attribute_type(eComponentType::UNSIGNED_BYTE, eType::VEC4);//std::vector<glm::u8vec4>();
+    attribute_type JOINTS_0   = attribute_type(eComponentType::UNSIGNED_SHORT, eType::VEC4);//std::vector<glm::u16vec4>();
+    attribute_type WEIGHTS_0  = attribute_type(eComponentType::FLOAT, eType::VEC4);//std::vector<glm::vec4>();
 
-    attribute_type INDEX    = std::vector<uint32_t>();
+    attribute_type INDEX    = attribute_type(eComponentType::UNSIGNED_INT, eType::SCALAR);//std::vector<glm::vec4>();
 
     Topology       topology = Topology::TRIANGLE_LIST;
 
@@ -361,10 +231,7 @@ struct MeshPrimitive
                            &WEIGHTS_0 ,
                            &INDEX})
         {
-            std::visit([](auto&& arg)
-            {
-                arg.clear();
-            }, *attr );
+            attr->clear();
         }
     }
     /**
@@ -379,15 +246,15 @@ struct MeshPrimitive
     {
         uint64_t size = 0;
 
-        size += VertexAttributeByteSize(POSITION  );
-        size += VertexAttributeByteSize(NORMAL    );
-        size += VertexAttributeByteSize(TANGENT   );
-        size += VertexAttributeByteSize(TEXCOORD_0);
-        size += VertexAttributeByteSize(TEXCOORD_1);
-        size += VertexAttributeByteSize(COLOR_0   );
-        size += VertexAttributeByteSize(JOINTS_0  );
-        size += VertexAttributeByteSize(WEIGHTS_0 );
-        size += VertexAttributeByteSize(INDEX);
+        size += POSITION  .getByteSize();
+        size += NORMAL    .getByteSize();
+        size += TANGENT   .getByteSize();
+        size += TEXCOORD_0.getByteSize();
+        size += TEXCOORD_1.getByteSize();
+        size += COLOR_0   .getByteSize();
+        size += JOINTS_0  .getByteSize();
+        size += WEIGHTS_0 .getByteSize();
+        size += INDEX.getByteSize();
 
         return size;
     }
@@ -404,24 +271,24 @@ struct MeshPrimitive
     bool isSimilar( MeshPrimitive const & P) const
     {
         return
-            POSITION  .index() == P.POSITION   .index() &&
-            NORMAL    .index() == P.NORMAL     .index() &&
-            TANGENT   .index() == P.TANGENT    .index() &&
-            TEXCOORD_0.index() == P.TEXCOORD_0 .index() &&
-            TEXCOORD_1.index() == P.TEXCOORD_1 .index() &&
-            COLOR_0   .index() == P.COLOR_0    .index() &&
-            JOINTS_0  .index() == P.JOINTS_0   .index() &&
-            WEIGHTS_0 .index() == P.WEIGHTS_0  .index() &&
-            INDEX     .index() == P.INDEX      .index();
+            POSITION  .canMerge(P.POSITION   ) &&
+            NORMAL    .canMerge(P.NORMAL     ) &&
+            TANGENT   .canMerge(P.TANGENT    ) &&
+            TEXCOORD_0.canMerge(P.TEXCOORD_0 ) &&
+            TEXCOORD_1.canMerge(P.TEXCOORD_1 ) &&
+            COLOR_0   .canMerge(P.COLOR_0    ) &&
+            JOINTS_0  .canMerge(P.JOINTS_0   ) &&
+            WEIGHTS_0 .canMerge(P.WEIGHTS_0  ) &&
+            INDEX     .canMerge(P.INDEX      );
     }
 
     size_t indexCount() const
     {
-        return VertexAttributeCount(INDEX);
+        return INDEX.attributeCount();
     }
     size_t vertexCount() const
     {
-        return VertexAttributeCount(POSITION);
+        return POSITION.attributeCount();
     }
 
     DrawCall getDrawCall() const
@@ -446,15 +313,15 @@ struct MeshPrimitive
 
         if( isSimilar(P) )
         {
-            VertexAttributeMerge(POSITION  , P.POSITION  );
-            VertexAttributeMerge(NORMAL    , P.NORMAL    );
-            VertexAttributeMerge(TANGENT   , P.TANGENT   );
-            VertexAttributeMerge(TEXCOORD_0, P.TEXCOORD_0);
-            VertexAttributeMerge(TEXCOORD_1, P.TEXCOORD_1);
-            VertexAttributeMerge(COLOR_0   , P.COLOR_0   );
-            VertexAttributeMerge(JOINTS_0  , P.JOINTS_0  );
-            VertexAttributeMerge(WEIGHTS_0 , P.WEIGHTS_0 );
-            VertexAttributeMerge(INDEX     , P.INDEX     );
+            POSITION  .merge(P.POSITION  );
+            NORMAL    .merge(P.NORMAL    );
+            TANGENT   .merge(P.TANGENT   );
+            TEXCOORD_0.merge(P.TEXCOORD_0);
+            TEXCOORD_1.merge(P.TEXCOORD_1);
+            COLOR_0   .merge(P.COLOR_0   );
+            JOINTS_0  .merge(P.JOINTS_0  );
+            WEIGHTS_0 .merge(P.WEIGHTS_0 );
+            INDEX     .merge(P.INDEX     );
 
             subMeshes.push_back(dc);
             return dc;
@@ -462,124 +329,136 @@ struct MeshPrimitive
         throw std::runtime_error("MeshPrimitives are not similar");
     }
 
+    uint64_t calculateInterleavedStride() const
+    {
+        uint64_t stride=0;
+        for(auto * v :  { &POSITION,
+                           &NORMAL,
+                           &TANGENT,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0,
+                           &JOINTS_0,
+                           &WEIGHTS_0})
+        {
+            stride += v->getAttributeSize();
+        }
+        return stride;
+    }
     /**
      * @brief copySequential
      * @param data
      * @return
      *
      * Copies all the vertex attributes sequentually into the provided buffer
-     * and returns the offsets of each attribute
+     * and returns the stride from one vertex to the next
      *
-     * [p0,p1,p2,n0,n1,n2,t0,t1,t2...]
+     * [p0,n0,t0,p1,n1,t1...]
      *
      *
      */
-    inline std::vector<size_t> copySequential(void * data) const
+    inline uint64_t copyVertexAttributesInterleaved(void * data) const
     {
-        return VertexAttributeCopySequential(data,
-                                      {
-                                          &POSITION,
-                                          &NORMAL,
-                                          &TANGENT,
-                                          &TEXCOORD_0,
-                                          &TEXCOORD_1,
-                                          &COLOR_0,
-                                          &JOINTS_0,
-                                          &WEIGHTS_0,
-                                          &INDEX
-                                      });
+        uint64_t stride = calculateInterleavedStride();
+        uint64_t offset = 0;
 
-    }
-
-    inline size_t copyVertexAttributesInterleaved(void * data) const
-    {
-        size_t attrCount=0;
-        auto stride = calculateInterleavedStride();
-        uint8_t * offset = static_cast<uint8_t*>(data);
-        for(auto & V : { &POSITION,
-                         &NORMAL,
-                         &TANGENT,
-                         &TEXCOORD_0,
-                         &TEXCOORD_1,
-                         &COLOR_0,
-                         &JOINTS_0,
-                         &WEIGHTS_0})
+        for(auto * v :  {  &POSITION,
+                           &NORMAL,
+                           &TANGENT,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0,
+                           &JOINTS_0,
+                           &WEIGHTS_0})
         {
-            auto count = gul::VertexAttributeCount(*V);
-            if( count != 0)
-            {
-                VertexAttributeStrideCopy(offset, *V, stride);
-                offset += gul::VertexAttributeSizeOf(*V);
-                attrCount = std::max(count, attrCount);
-            }
-        }
-        return attrCount * stride;
-        //return VertexAttributeInterleaved(data,
-        //                              {
-        //                                  &POSITION,
-        //                                  &NORMAL,
-        //                                  &TANGENT,
-        //                                  &TEXCOORD_0,
-        //                                  &TEXCOORD_1,
-        //                                  &COLOR_0,
-        //                                  &JOINTS_0,
-        //                                  &WEIGHTS_0,
-        //                              });
-
-    }
-
-    inline size_t copyIndex(void * data) const
-    {
-        return std::visit( [data](auto && arg)
-        {
-            using type_ = typename std::decay_t<decltype(arg)>::value_type;
-            std::memcpy(data, arg.data(), arg.size() * sizeof(type_));
-            return arg.size() * sizeof(type_);
-        }, INDEX);
-
-    }
-
-    inline size_t calculateInterleavedStride() const
-    {
-        size_t stride = 0;
-        for(auto & V : { &POSITION,
-                         &NORMAL,
-                         &TANGENT,
-                         &TEXCOORD_0,
-                         &TEXCOORD_1,
-                         &COLOR_0,
-                         &JOINTS_0,
-                         &WEIGHTS_0})
-        {
-            auto count = gul::VertexAttributeCount(*V);
-            if(count)
-            {
-                stride += gul::VertexAttributeSizeOf(*V);
-            }
+            auto & V = *v;
+            V.strideCopy( static_cast<uint8_t*>(data)+offset, stride);
+            offset += V.getAttributeSize();
         }
         return stride;
     }
 
-    inline uint64_t calculateInterleavedBufferSize() const
-    {
-        size_t bufferSize = 0;
-        for(auto & V : { &POSITION,
-                         &NORMAL,
-                         &TANGENT,
-                         &TEXCOORD_0,
-                         &TEXCOORD_1,
-                         &COLOR_0,
-                         &JOINTS_0,
-                         &WEIGHTS_0})
-        {
-            auto count = gul::VertexAttributeCount(*V);
-            if(count)
-            {
 
-                bufferSize += gul::VertexAttributeByteSize(*V);
+    /**
+     * @brief getVertexCount
+     * @return
+     *
+     * Returns the number of vertices in the mesh
+     */
+    uint64_t getVertexCount() const
+    {
+        uint64_t vertexCount = std::numeric_limits<uint64_t>::max();
+        for(auto * v :  {  &POSITION,
+                           &NORMAL,
+                           &TANGENT,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0,
+                           &JOINTS_0,
+                           &WEIGHTS_0})
+        {
+            auto attrSize = v->getAttributeSize();
+            (void)attrSize;
+            if(v->attributeCount() != 0)
+                vertexCount = std::min<uint64_t>(vertexCount, v->attributeCount());
+        }
+        return vertexCount;
+    }
+
+    std::vector<uint64_t> copyVertexAttributesSquential(void * data) const
+    {
+        auto vertexCount = getVertexCount();
+        std::vector<uint64_t> offsets;
+        uint64_t offset=0;
+        for(auto * v :  {  &POSITION,
+                           &NORMAL,
+                           &TANGENT,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0,
+                           &JOINTS_0,
+                           &WEIGHTS_0,
+                           &INDEX})
+        {
+            if(!v->empty())
+            {
+                offsets.push_back(offset);
+                auto attrSize = v->getAttributeSize();
+
+                auto count = v->attributeCount();
+                assert( count * attrSize <= v->m_data.size());
+                std::memcpy( static_cast<uint8_t*>(data)+offset, v->m_data.data(), count * v->getAttributeSize());
+                offset += count * v->getAttributeSize();
+            }
+            else
+            {
+                offsets.push_back(0);
             }
         }
-        return bufferSize;
+        return offsets;
+    }
+
+    inline uint64_t copyIndex(void * data) const
+    {
+        std::memcpy(data, INDEX.m_data.data(), INDEX.m_data.size());
+        return INDEX.m_data.size();
+    }
+
+    /**
+     * @brief getVertexSize
+     * @return
+     *
+     * Returns the size of the vertrex in bytes if all the
+     * attributes were interleaved
+     */
+    uint64_t getVertexSize() const
+    {
+        return calculateInterleavedStride();
+    }
+
+    inline uint64_t calculateInterleavedBufferSize() const
+    {
+        return getVertexSize() * getVertexCount();
     }
 
     /**
@@ -589,86 +468,134 @@ struct MeshPrimitive
      */
     void fuseVertices()
     {
+        using _vec2 = std::array<float,2>;
+        using _vec3 = std::array<float,3>;
+        using _ivec3 = std::array<int32_t,3>;
+
         std::map< std::tuple<int32_t, int32_t, int32_t>, uint32_t> posToIndex;
 
-        auto & _POS = std::get< std::vector<glm::vec3> >(POSITION);
-        auto & _NOR = std::get< std::vector<glm::vec3> >(NORMAL);
-        auto & _UV = std::get< std::vector<glm::vec2> >(TEXCOORD_0);
+        auto & _POS = POSITION;
+        auto & _NOR = NORMAL;
+        auto & _UV  = TEXCOORD_0;
+        auto & _INDEX = INDEX;
 
-        auto & _INDEX = std::get< std::vector<uint32_t> >(INDEX);
-
-        std::vector<glm::vec3> NEW_POS;
-        std::vector<glm::vec3> NEW_NOR;
-        std::vector<glm::vec2> NEW_UV;
+        std::vector<_vec3> NEW_POS;
+        std::vector<_vec3> NEW_NOR;
+        std::vector<_vec2> NEW_UV;
 
         uint32_t index = 0;
-        uint32_t j=0;
-        for(auto & p : _POS)
+        uint32_t j     = 0;
+
+        auto vCount = getVertexCount();
+        for(uint32_t j=0;j<vCount;j++)
         {
-            glm::ivec3 P( p*100.0f );
-            if( posToIndex.insert( { {P.x, P.y, P.z}, index }).second)
+            auto p = _POS.at<_vec3>(j);
+
+            _ivec3 P{ int32_t(p[0]*100.0f) , int32_t(p[1]*100.0f) , int32_t(p[2]*100.0f) };
+
+            if( posToIndex.insert( { {P[0], P[1], P[2]}, index }).second)
             {
                 NEW_POS.push_back(p);
                 if(!_NOR.empty())
-                    NEW_NOR.push_back(_NOR[j]);
+                    NEW_NOR.push_back(_NOR.at<_vec3>(j));
                 if(!_UV.empty())
-                    NEW_UV.push_back(_UV[j]);
+                    NEW_UV.push_back(_UV.at<_vec2>(j));
                 index++;
             }
-            j++;
         }
 
         std::vector<uint32_t> newINDEX;
-        for(auto i : _INDEX)
+        for(uint32_t j=0;j<_INDEX.attributeCount();j++)
         {
-            auto & p = _POS[i];
-            glm::ivec3 P( p*100.0f );
-            newINDEX.push_back( posToIndex[{P.x,P.y,P.z}]);
+            auto i = _INDEX.at<uint32_t>(j);
+            auto p = _POS.at<_vec3>(i);
+            _ivec3 P{ int32_t(p[0]*100.0f) , int32_t(p[1]*100.0f) , int32_t(p[2]*100.0f) };
+            newINDEX.push_back( posToIndex.at({P[0],P[1],P[2]}) );
         }
-        INDEX = std::move(newINDEX);
-        POSITION = std::move(NEW_POS);
-        NORMAL = std::move(NEW_NOR);
-        TEXCOORD_0= std::move(NEW_UV);
+
+        INDEX      = newINDEX;
+        POSITION   = NEW_POS;
+        NORMAL     = NEW_NOR;
+        TEXCOORD_0 = NEW_UV;
     }
 
     void rebuildNormals()
     {
-        if( std::holds_alternative< std::vector<uint32_t> >(INDEX))
+        using _vec2 = std::array<float,2>;
+        using _vec3 = std::array<float,3>;
+
         {
-            auto & I = std::get< std::vector<uint32_t > >(INDEX);
-            auto & P = std::get< std::vector<glm::vec3> >(POSITION);
-            std::vector< glm::vec3 > normals(P.size(), glm::vec3(0,0,0));
+            auto & I = INDEX;
+            auto & P = POSITION;
+            std::vector< _vec3 > normals(P.attributeCount(), _vec3({0,0,0}));
 
-            for(size_t i=0;i<I.size();i+=3)
+            auto iC = I.attributeCount();
+
+            for(size_t j=0; j< iC; j+=3)
             {
-                auto v1 = P[i+1] - P[i];
-                auto v2 = P[i+2] - P[i];
-                auto n = glm::cross(v1,v2);
+                auto i0 = I.at<uint32_t>(j);
+                auto i1 = I.at<uint32_t>(j+1);
+                auto i2 = I.at<uint32_t>(j+2);
 
-                normals[i] += n;
-                normals[i+1] += n;
-                normals[i+2] += n;
+                auto p0 = P.at<_vec3>(i0);
+                auto p1 = P.at<_vec3>(i1);
+                auto p2 = P.at<_vec3>(i2);
+
+                decltype(p0) v1, v2;
+                v1[0] = p1[0] - p0[1];
+                v1[1] = p1[1] - p0[1];
+                v1[2] = p1[2] - p0[2];
+
+                v2[0] = p2[0] - p0[1];
+                v2[1] = p2[1] - p0[1];
+                v2[2] = p2[2] - p0[2];
+
+                auto & x = v1;
+                auto & y = v2;
+
+                _vec3 n = {
+                    x[1] * y[2] - y[1] * x[2],
+                    x[2] * y[0] - y[2] * x[0],
+                    x[0] * y[1] - y[0] * x[1] };
+
+
+                normals[i0][0] += n[0];
+                normals[i1][0] += n[0];
+                normals[i2][0] += n[0];
+
+                normals[i0][1] += n[1];
+                normals[i1][1] += n[1];
+                normals[i2][1] += n[1];
+
+                normals[i0][2] += n[2];
+                normals[i1][2] += n[2];
+                normals[i2][2] += n[2];
             }
+
             for(auto & n : normals)
             {
-                n = glm::normalize(n);
+                auto L = 1.0f / n[0]*n[0] + n[1]*n[1] + n[2]*n[2];
+                n[0] *= L;
+                n[1] *= L;
+                n[2] *= L;
             }
-            NORMAL = std::move(normals);
+
+            NORMAL = normals;
         }
     }
 };
 
 inline MeshPrimitive Box(float dx , float dy , float dz )
 {
-    using _vec2 = glm::vec2;//std::array<float,2>;
-    using _vec3 = glm::vec3;//std::array<float,3>;
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
 
     MeshPrimitive M;
 
-    auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
-    auto & N = std::get< std::vector<glm::vec3> >(M.NORMAL);
-    auto & U = std::get< std::vector<glm::vec2> >(M.TEXCOORD_0);
-    auto & I = std::get< std::vector<uint32_t > >(M.INDEX);
+    auto & P = M.POSITION;
+    auto & N = M.NORMAL;
+    auto & U = M.TEXCOORD_0;
+    auto & I = M.INDEX;
 
 
 //       |       Position                           |   UV         |     Normal    |
@@ -714,6 +641,7 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
 
 
     //=========================
+    I.init(eComponentType::UNSIGNED_SHORT, eType::SCALAR);
     for( uint16_t j=0;j<36;j++)
         I.push_back( j );
 
@@ -727,14 +655,13 @@ inline MeshPrimitive Box(float dx )
 
 inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=5, int majorW=5, float lscale=1.0f, float wscale=1.0f)
 {
-
-    using _vec3  = glm::vec3;//std::array<float,3>;
-    using _uvec4 = glm::u8vec4;//std::array<uint8_t,4>;
+    using _vec3  = std::array<float,3>;
+    using _uvec4 = std::array<uint8_t,4>;
 
     MeshPrimitive M;
     M.topology = Topology::LINE_LIST;
-    auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
-    auto & C = std::get< std::vector<glm::u8vec4> >(M.COLOR_0);
+    auto & P = M.POSITION;
+    auto & C = M.COLOR_0;
 
     //_uvec4 xColor{1,1,1,255};
     _uvec4 xColor{80,80,80,255};
@@ -797,16 +724,15 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
 
 inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=20)
 {
-    using _vec2 = glm::vec2;//std::array<float,2>;
-    using _vec3 = glm::vec3;//std::array<float,3>;
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
 
     MeshPrimitive M;
 
-
-    auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
-    auto & N = std::get< std::vector<glm::vec3> >(M.NORMAL);
-    auto & U = std::get< std::vector<glm::vec2> >(M.TEXCOORD_0);
-    auto & I = std::get< std::vector<uint32_t > >(M.INDEX);
+    auto & P = M.POSITION;
+    auto & N = M.NORMAL;
+    auto & U = M.TEXCOORD_0;
+    auto & I = M.INDEX;
 
 
     float const R = 1.0f / static_cast<float>(rings-1);
@@ -830,7 +756,7 @@ inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=2
         }
     }
 
-
+    I.init(eComponentType::UNSIGNED_SHORT, eType::SCALAR);
     for(r = 0 ; r < rings   - 1 ; r++)
     {
         for(s = 0 ; s < sectors - 1 ; s++)
@@ -857,36 +783,42 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
 {
     MeshPrimitive M;
 
-    auto & P = std::get< std::vector<glm::vec3> >(M.POSITION);
-    auto & N = std::get< std::vector<glm::vec3> >(M.NORMAL);
-    auto & I = std::get< std::vector<uint32_t > >(M.INDEX);
-    auto & U = std::get< std::vector<glm::vec2> >(M.TEXCOORD_0);
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
 
-    P.emplace_back(-sideLength,-sideLength,0);
-    P.emplace_back( sideLength,-sideLength,0);
-    P.emplace_back( sideLength, sideLength,0);
-    P.emplace_back(-sideLength, sideLength,0);
+    auto & P = M.POSITION;
+    auto & N = M.NORMAL;
+    auto & I = M.INDEX;
+    auto & U = M.TEXCOORD_0;
 
-    U.emplace_back( 0.0f, 1.0f);
-    U.emplace_back( 1.0f, 1.0f);
-    U.emplace_back( 1.0f, 0.0f);
-    U.emplace_back( 0.0f, 0.0f);
+    P.push_back( _vec3{-sideLength,-sideLength,0});
+    P.push_back( _vec3{ sideLength,-sideLength,0});
+    P.push_back( _vec3{ sideLength, sideLength,0});
+    P.push_back( _vec3{-sideLength, sideLength,0});
 
-    N.emplace_back(0,0,1);
-    N.emplace_back(0,0,1);
-    N.emplace_back(0,0,1);
-    N.emplace_back(0,0,1);
+    U.push_back( _vec2{0.0f, 1.0f});
+    U.push_back( _vec2{1.0f, 1.0f});
+    U.push_back( _vec2{1.0f, 0.0f});
+    U.push_back( _vec2{0.0f, 0.0f});
 
-    I = {0,1,2,0,2,3};
+    N.push_back(_vec3{0,0,1});
+    N.push_back(_vec3{0,0,1});
+    N.push_back(_vec3{0,0,1});
+    N.push_back(_vec3{0,0,1});
+
+    I = std::vector<uint32_t>{0,1,2,0,2,3};
 
     return M;
 }
 
 inline MeshPrimitive ReadOBJ(std::ifstream & in)
 {
-    std::vector< glm::vec3 > position;
-    std::vector< glm::vec3 > normal;
-    std::vector< glm::vec2 > uv;
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
+
+    std::vector< _vec3 > position;
+    std::vector< _vec3 > normal;
+    std::vector< _vec2 > uv;
 
     struct faceIndex
     {
@@ -947,25 +879,25 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
         ins >> line;
         if(line == "v")
         {
-            glm::vec3 p;
-            ins  >> p.x;
-            ins  >> p.y;
-            ins  >> p.z;
+            _vec3 p;
+            ins  >> p[0];
+            ins  >> p[1];
+            ins  >> p[2];
             position.push_back(p);
         }
         else if(line == "vn")
         {
-            glm::vec3 p;
-            ins  >> p.x;
-            ins  >> p.y;
-            ins  >> p.z;
+            _vec3 p;
+            ins  >> p[0];
+            ins  >> p[1];
+            ins  >> p[2];
             normal.push_back(p);
         }
         else if(line == "vt")
         {
-            glm::vec2 p;
-            ins  >> p.x;
-            ins  >> p.y;
+            _vec2 p;
+            ins  >> p[0];
+            ins  >> p[1];
             uv.push_back(p);
         }
         else if(line == "f")
@@ -1007,9 +939,9 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
 
     gul::MeshPrimitive M;
 
-    std::vector<glm::vec3> POSITION;
-    std::vector<glm::vec2> TEXCOORD;
-    std::vector<glm::vec3> NORMAL;
+    std::vector<_vec3> POSITION;
+    std::vector<_vec2> TEXCOORD;
+    std::vector<_vec3> NORMAL;
     std::vector<uint32_t> INDEX;
 
     for(size_t i=0;i<tris.size(); i+= 3)

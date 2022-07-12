@@ -8,6 +8,13 @@
 namespace gul
 {
 
+/**
+ * @brief The writer_preferred_shared_mutex struct
+ *
+ * A writer_preferred_shared_mutex works similarly to std::shared_mutex
+ * except it will priortize writers over readers.
+ *
+ */
 struct writer_preferred_shared_mutex
 {
     void lock_shared()
