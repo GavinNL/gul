@@ -30,18 +30,19 @@
 
 namespace gul
 {
-/*
-    Frustum class that represents the frustum in 3 dimensional space.
-    it can be used to check clipping with bounding boxes.
-
-*/
+/**
+ * @brief The frustum_t struct
+ *
+ * A class which represents a frustum in 3d space. It can be used to check clipping
+ * with bounding boxes
+ */
 template<typename T>
 struct frustum_t
 {
-    typedef T                                    value_type;
-    typedef glm::tvec3<value_type, glm::highp>   vec_type;
-    typedef glm::tvec4<value_type, glm::highp>   vec4_type;
-    typedef glm::tmat4x4<value_type, glm::highp> mat_type;
+    using value_type = T;
+    using vec_type   = glm::tvec3<value_type, glm::highp>;
+    using vec4_type  = glm::tvec4<value_type, glm::highp>;
+    using mat_type   = glm::tmat4x4<value_type, glm::highp>;
     using point_type = point_t<value_type>;
     using line_type  = line_t<value_type>;
     using plane_type = plane_t<value_type>;
@@ -51,12 +52,6 @@ struct frustum_t
     {
 
     }
-
-
-//    frustum(const vka::Camera & camera) : frustum( camera.GetProjectionMatrix() )
-//    {
-//        Transform( camera.GetMatrix() );
-//    }
 
     /**
      * @brief Frustum
