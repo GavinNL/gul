@@ -81,7 +81,10 @@ SCENARIO("Background loading")
         TextResource R;
         R.data = std::string((std::istreambuf_iterator<char>(t)),
                               std::istreambuf_iterator<char>());
+
+        // simulate loading a large file
         std::this_thread::sleep_for(std::chrono::seconds(2));
+
         return R;
     });
 
@@ -90,6 +93,7 @@ SCENARIO("Background loading")
         REQUIRE( !rId->isLoaded() );
         REQUIRE( !rId->isLoading() ); // not loding in teh background
 
+        // Get the background loader and pass it into a thread
         std::thread th(rId->getBackgroundLoader() );
 
         // wait a few moments so that the thread can actually start up

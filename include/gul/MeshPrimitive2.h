@@ -15,9 +15,9 @@
 namespace gul
 {
 
-
 enum class eComponentType : uint32_t
 {
+    UNKNOWN        = 0,
     BYTE           = 5120,
     UNSIGNED_BYTE  = 5121,
     SHORT          = 5122,
@@ -38,6 +38,19 @@ enum class eType : uint32_t
 };
 
 
+/**
+ * @brief The VertexAttribute struct
+ *
+ * The vertex attribute class is essentially a vector of data
+ * for a single attribute. This is NOT meant for compound vertices: eg
+ * struct Vertex
+ * {
+ *    vec3 position;
+ *    vec2 uv;
+ * }
+ *
+ *
+ */
 struct VertexAttribute
 {
     VertexAttribute()
@@ -49,11 +62,20 @@ struct VertexAttribute
         m_componentType = c;
         m_type = t;
     }
+    /**
+     * @brief init
+     * @param c
+     * @param t
+     *
+     * Initialize the vertex attribute based on its base component type and
+     * its attribute type
+     */
     void init(eComponentType c, eType t)
     {
         m_componentType = c;
         m_type = t;
     }
+
     template<typename T>
     VertexAttribute& operator=(std::vector<T> const & v)
     {
@@ -76,6 +98,13 @@ struct VertexAttribute
         std::memcpy(&v, m_data.data() + index * getAttributeSize() + componentIndex * getComponentSizeOf(m_componentType), sizeof(T));
         return v;
     }
+
+    /**
+     * @brief push_back
+     * @param v
+     *
+     * Pushes data to the end of the vector
+     */
     template<typename T>
     void push_back(T const & v)
     {
@@ -88,6 +117,12 @@ struct VertexAttribute
     {
         return m_data.empty();
     }
+
+    /**
+     * @brief getType
+     * @return
+     *
+     */
     eType getType() const
     {
         return m_type;
@@ -118,6 +153,13 @@ struct VertexAttribute
         }
     }
 
+    /**
+     * @brief getAttributeSize
+     * @return
+     *
+     * Returns the size of the attribute. If it returns 0 it means that
+     * the attribute type has not been set
+     */
     uint32_t getAttributeSize() const
     {
         return getComponentSizeOf(m_componentType) * getNumComponents();
@@ -128,15 +170,38 @@ struct VertexAttribute
         return m_data.size();
     }
 
+    /**
+     * @brief attributeCount
+     * @return
+     *
+     * Returns the total number of attributes in the buffer.
+     */
     uint64_t attributeCount() const
     {
         return m_data.size() / getAttributeSize();
     }
 
+    /**
+     * @brief canMerge
+     * @param B
+     * @return
+     *
+     * Returns wither you can merge this vertex attribute with another.
+     * You can only merge the two if the componentType and the Type are the same
+     */
     bool canMerge(VertexAttribute const & B) const
     {
         return m_componentType == B.m_componentType && m_type == B.m_type;
     }
+
+    /**
+     * @brief merge
+     * @param B
+     * @return
+     *
+     * Merge B to the end of the attribute vector and return the index
+     * at which the data was merged.
+     */
     uint64_t merge(VertexAttribute const& B)
     {
         auto s = m_data.size();
@@ -144,6 +209,24 @@ struct VertexAttribute
         return s;
     }
 
+    /**
+     * @brief strideCopy
+     * @param data
+     * @param stride
+     *
+     * Copy the vertex attribute data into the memory location.
+     *
+     * if V = [p0,p1,p2,p3]
+     *
+     * Then a stride copy of strideCopy(data, 2*sizeof(p0)) will copy data as follows
+     *
+     * data = [p0|  |p1|  |p2| |p3]
+     *
+     * This is used to interleave multiple attribute. eg:
+     *
+     * positionAttribute.strideCopy(data, sizeof(vec3) )
+     * uvAttribute.strideCopy( data+sizeof(vec3), sizeof(vec2) )
+     */
     void strideCopy(void * data, uint64_t stride) const
     {
         auto c = attributeCount();
@@ -163,8 +246,8 @@ struct VertexAttribute
     }
 
     std::vector<uint8_t> m_data;
-    eComponentType       m_componentType;
-    eType                m_type;
+    eComponentType       m_componentType = eComponentType::UNKNOWN;
+    eType                m_type = eType::UNKNOWN;
 };
 
 
@@ -198,22 +281,21 @@ struct DrawCall
  * A Mesh Primitive is a class which allows
  * you to represent a triangular mesh
  *
- * The attributes are
  */
 struct MeshPrimitive
 {
     using attribute_type = VertexAttribute;
 
-    attribute_type POSITION   = attribute_type(eComponentType::FLOAT, eType::VEC3);//std::vector<glm::vec3>  ();
-    attribute_type NORMAL     = attribute_type(eComponentType::FLOAT, eType::VEC3);//std::vector<glm::vec3>  ();
-    attribute_type TANGENT    = attribute_type(eComponentType::FLOAT, eType::VEC4);//std::vector<glm::vec3>  ();
-    attribute_type TEXCOORD_0 = attribute_type(eComponentType::FLOAT, eType::VEC2);//std::vector<glm::vec2>  ();
-    attribute_type TEXCOORD_1 = attribute_type(eComponentType::FLOAT, eType::VEC2);//std::vector<glm::vec2>  ();
-    attribute_type COLOR_0    = attribute_type(eComponentType::UNSIGNED_BYTE, eType::VEC4);//std::vector<glm::u8vec4>();
-    attribute_type JOINTS_0   = attribute_type(eComponentType::UNSIGNED_SHORT, eType::VEC4);//std::vector<glm::u16vec4>();
-    attribute_type WEIGHTS_0  = attribute_type(eComponentType::FLOAT, eType::VEC4);//std::vector<glm::vec4>();
+    attribute_type POSITION   = attribute_type(eComponentType::FLOAT, eType::VEC3);
+    attribute_type NORMAL     = attribute_type(eComponentType::FLOAT, eType::VEC3);
+    attribute_type TANGENT    = attribute_type(eComponentType::FLOAT, eType::VEC4);
+    attribute_type TEXCOORD_0 = attribute_type(eComponentType::FLOAT, eType::VEC2);
+    attribute_type TEXCOORD_1 = attribute_type(eComponentType::FLOAT, eType::VEC2);
+    attribute_type COLOR_0    = attribute_type(eComponentType::UNSIGNED_BYTE, eType::VEC4);
+    attribute_type JOINTS_0   = attribute_type(eComponentType::UNSIGNED_SHORT, eType::VEC4);
+    attribute_type WEIGHTS_0  = attribute_type(eComponentType::FLOAT, eType::VEC4);
 
-    attribute_type INDEX    = attribute_type(eComponentType::UNSIGNED_INT, eType::SCALAR);//std::vector<glm::vec4>();
+    attribute_type INDEX      = attribute_type(eComponentType::UNSIGNED_INT, eType::SCALAR);
 
     Topology       topology = Topology::TRIANGLE_LIST;
 
@@ -234,6 +316,8 @@ struct MeshPrimitive
             attr->clear();
         }
     }
+
+
     /**
      * @brief calculateDeviceSize
      * @return
@@ -329,6 +413,17 @@ struct MeshPrimitive
         throw std::runtime_error("MeshPrimitives are not similar");
     }
 
+    /**
+     * @brief calculateInterleavedStride
+     * @return
+     *
+     * Returns the number of bytes required to copy all the attributes
+     * in an interleaved layout: eg:
+     *
+     * [p0,n0,t0,p1,n1,t1...]
+     *
+     * The index buffer is not taken into account in the calculation
+     */
     uint64_t calculateInterleavedStride() const
     {
         uint64_t stride=0;
@@ -383,7 +478,8 @@ struct MeshPrimitive
      * @brief getVertexCount
      * @return
      *
-     * Returns the number of vertices in the mesh
+     * Returns the number of vertices in the mesh. The number of veertices
+     * is the munimum number of vertices in all the attributes
      */
     uint64_t getVertexCount() const
     {
@@ -405,6 +501,20 @@ struct MeshPrimitive
         return vertexCount;
     }
 
+    /**
+     * @brief copyVertexAttributesSquential
+     * @param data
+     * @return
+     *
+     * Copies the data in sequential layout and retuns the offsets for each
+     * attribute.
+     *
+     * eg:
+     *
+     * p0,p1,p2,n0,n1,n2,t0,t1,t2...
+     *
+     * The index buffer is always placed at the end
+     */
     std::vector<uint64_t> copyVertexAttributesSquential(void * data) const
     {
         auto vertexCount = getVertexCount();
@@ -438,7 +548,14 @@ struct MeshPrimitive
         return offsets;
     }
 
-    inline uint64_t copyIndex(void * data) const
+    /**
+     * @brief copyIndex
+     * @param data
+     * @return
+     *
+     * Copy the index buffer
+     */
+    uint64_t copyIndex(void * data) const
     {
         std::memcpy(data, INDEX.m_data.data(), INDEX.m_data.size());
         return INDEX.m_data.size();
@@ -519,6 +636,11 @@ struct MeshPrimitive
         TEXCOORD_0 = NEW_UV;
     }
 
+    /**
+     * @brief rebuildNormals
+     *
+     * Recalculate the normals for each vertex
+     */
     void rebuildNormals()
     {
         using _vec2 = std::array<float,2>;

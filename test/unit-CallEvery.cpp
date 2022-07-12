@@ -7,7 +7,7 @@ using namespace gul;
 
 SCENARIO("Execute without sleeping")
 {
-    CallEvery C1;
+    CallEvery C1( std::chrono::milliseconds(20));
     size_t count = 0;
     size_t iterations = 0;
 
@@ -34,7 +34,7 @@ SCENARIO("Execute without sleeping")
 
 SCENARIO("Execute without sleeping, no-lambda")
 {
-    CallEvery C1;
+    CallEvery C1( std::chrono::milliseconds(20));
     size_t count = 0;
     size_t iterations = 0;
 
@@ -65,7 +65,7 @@ SCENARIO("Execute without sleeping, no-lambda")
 
 SCENARIO("Execute with sleep")
 {
-    CallEvery C1;
+    CallEvery C1( std::chrono::milliseconds(20));
     size_t count = 0;
     size_t iterations = 0;
     while(count < 10)
