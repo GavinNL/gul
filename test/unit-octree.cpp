@@ -10,6 +10,7 @@
 #include <gul/math/frustum.h>
 #include <glm/matrix.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <gul/math/Transform.h>
 #include <random>
 
 SCENARIO("TEST")
@@ -100,23 +101,60 @@ SCENARIO("TEST3")
     gul::Octree<uint32_t> Node( {0,0,0}, std::pow(2.f,20.f));
 
     gul::bb3f objSize( glm::vec3{-0.5f}, glm::vec3{0.5f});
+    glm::vec3 nodePos = glm::vec3(0, 0, -10);
 
-   {
+
+    {
         auto pos = objSize;
-        pos.translate( {0,0,-10});
+        pos.translate( nodePos);
         Node.insert( 0, pos);
     }
 
-    auto P = glm::perspective( glm::radians(90.0f), 4.0f/3.0f, 0.1f, 100.f);
-    gul::frustum F(P);
-    auto T = glm::translate(glm::mat4(1.0f), glm::vec3(100,0,0));
-    F.transform(T);
-    size_t count=0;
-    Node.query<gul::frustum>(F, [&](auto & node)
-    {
-        count++;
-        (void)node;
-    });
-    REQUIRE( count == 1);
 
+    THEN("Frustum looking down the - z axis")
+    {
+        gul::Transform T;
+
+        gul::frustum F(glm::perspective( glm::radians(90.0f), 4.0f/3.0f, 0.1f, 100.f));
+
+
+        F.transform(T.getMatrix());
+        size_t count=0;
+        Node.query<gul::frustum>(F, [&](auto & node)
+        {
+            count++;
+            (void)node;
+        });
+        REQUIRE( count == 1);
+    }
+
+    THEN("Frustum looking down the +z axis")
+    {
+        gul::frustum F(glm::perspective( glm::radians(90.0f), 4.0f/3.0f, 0.1f, 100.f));
+        gul::Transform T = gul::Transform::R180y();
+
+        F.transform(T.getMatrix());
+        size_t count=0;
+        Node.query<gul::frustum>(F, [&](auto & node)
+        {
+            count++;
+            (void)node;
+        });
+        REQUIRE( count == 0);
+    }
+
+    THEN("Frustum looking down the +z axis")
+    {
+        gul::frustum F(glm::perspective( glm::radians(90.0f), 4.0f/3.0f, 0.1f, 100.f));
+        gul::Transform T = gul::Transform::R180y();
+        T.position = {0,0,-20};
+        F.transform(T.getMatrix());
+        size_t count=0;
+        Node.query<gul::frustum>(F, [&](auto & node)
+        {
+            count++;
+            (void)node;
+        });
+        REQUIRE( count == 1);
+    }
 }
