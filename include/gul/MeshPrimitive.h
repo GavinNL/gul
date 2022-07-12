@@ -347,6 +347,8 @@ struct MeshPrimitive
 
     Topology       topology = Topology::TRIANGLE_LIST;
 
+    std::vector<DrawCall> subMeshes;
+
     void clear()
     {
         for(auto * attr : {&POSITION  ,
@@ -453,6 +455,8 @@ struct MeshPrimitive
             VertexAttributeMerge(JOINTS_0  , P.JOINTS_0  );
             VertexAttributeMerge(WEIGHTS_0 , P.WEIGHTS_0 );
             VertexAttributeMerge(INDEX     , P.INDEX     );
+
+            subMeshes.push_back(dc);
             return dc;
         }
         throw std::runtime_error("MeshPrimitives are not similar");
