@@ -7,7 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <atomic>
-
+#include <any>
 
 // C++17 includes the <filesystem> library, but
 // unfortunately gcc7 does not have a finalized version of it
@@ -238,6 +238,14 @@ struct Resource_t
         return *value;
     }
 
+    std::any const & getUserData() const
+    {
+        return m_userData;
+    }
+    std::any & getUserData()
+    {
+        return m_userData;
+    }
 protected:
     using loader_function   = std::function<T(gul::uri const &)>;
     using unloader_function = std::function<void(std::shared_ptr<Resource_t<T>>)>;
@@ -246,13 +254,14 @@ protected:
     gul::uri                                             uri;
     std::shared_ptr<std::function<T(gul::uri const &C)>> m_loader;
     std::chrono::system_clock::time_point                m_loadTime;
-    std::chrono::system_clock::time_point                m_accessTime; // the last time this resource was accessed
+    std::chrono::system_clock::time_point                m_accessTime = std::chrono::system_clock::now(); // the last time this resource was accessed
     std::shared_ptr<std::mutex>                          m_mutex;
 
     bool m_unloadLater         = false;
     bool m_dirty               = true;
     std::atomic<bool> m_isBackgroundLoading = false;
 
+    std::any m_userData;
     friend struct SingleResourceManager<T>;
 };
 
