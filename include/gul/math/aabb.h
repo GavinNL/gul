@@ -31,6 +31,15 @@ public:
        return _dim;
     }
 
+    aabb_t(const value_type& _halfExtents) : aabb_t(-vec_type(_halfExtents), vec_type(_halfExtents))
+    {
+
+    }
+    aabb_t(const vec_type& _halfExtents) : aabb_t(-_halfExtents, _halfExtents)
+    {
+
+    }
+
     aabb_t(const vec_type& lowerBound_,
            const vec_type& upperBound_) : lowerBound(lowerBound_),
                                           upperBound(upperBound_)
