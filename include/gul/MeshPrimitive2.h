@@ -245,6 +245,94 @@ struct VertexAttribute
         m_data.clear();
     }
 
+    template<typename T>
+    std::vector<T> getMinMax() const
+    {
+        auto & V = *this;
+        std::vector<T> _out;
+        auto count = V.attributeCount();
+        T _m[] = {std::numeric_limits<T>::max(),std::numeric_limits<T>::max(),std::numeric_limits<T>::max(),std::numeric_limits<T>::max()};
+        T _M[] = {std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest()};
+
+        switch(V.getType())
+        {
+        case gul::eType::UNKNOWN:
+            break;
+        case gul::eType::SCALAR:
+            for(uint32_t i=0;i<count;i++)
+            {
+                auto val = V.at<T>(i,0);
+                _m[0] = std::min(val, _m);
+                _M[0] = std::max(val, _M);
+            }
+            _out.push_back(_m[0]);
+            _out.push_back(_M[1]);
+            return _out;
+        case gul::eType::VEC2:
+            for(uint32_t i=0;i<count;i++)
+            {
+                auto val0 = V.at<T>(i,0);
+                auto val1 = V.at<T>(i,1);
+                _m[0] = std::min(val0, _m[0]);
+                _m[1] = std::min(val1, _m[1]);
+                _M[0] = std::max(val0, _M[0]);
+                _M[1] = std::min(val1, _M[1]);
+            }
+            _out.push_back(_m[0]);
+            _out.push_back(_m[1]);
+            _out.push_back(_M[0]);
+            _out.push_back(_M[1]);
+            return _out;
+        case gul::eType::VEC3:
+            for(uint32_t i=0;i<count;i++)
+            {
+                auto val0 = V.at<T>(i,0);
+                auto val1 = V.at<T>(i,1);
+                auto val2 = V.at<T>(i,2);
+                _m[0] = std::min(val0, _m[0]);
+                _m[1] = std::min(val1, _m[1]);
+                _m[2] = std::min(val2, _m[2]);
+                _M[0] = std::max(val0, _M[0]);
+                _M[1] = std::min(val1, _M[1]);
+                _M[2] = std::min(val2, _M[2]);
+            }
+            _out.push_back(_m[0]);
+            _out.push_back(_m[1]);
+            _out.push_back(_m[2]);
+            _out.push_back(_M[0]);
+            _out.push_back(_M[1]);
+            _out.push_back(_M[2]);
+            return _out;
+        case gul::eType::VEC4:
+            for(uint32_t i=0;i<count;i++)
+            {
+                auto val0 = V.at<T>(i,0);
+                auto val1 = V.at<T>(i,1);
+                auto val2 = V.at<T>(i,2);
+                auto val3 = V.at<T>(i,3);
+                _m[0] = std::min(val0, _m[0]);
+                _m[1] = std::min(val1, _m[1]);
+                _m[2] = std::min(val2, _m[2]);
+                _m[3] = std::min(val2, _m[3]);
+                _M[0] = std::max(val0, _M[0]);
+                _M[1] = std::min(val1, _M[1]);
+                _M[2] = std::min(val2, _M[2]);
+                _M[3] = std::min(val2, _M[3]);
+            }
+            _out.push_back(_m[0]);
+            _out.push_back(_m[1]);
+            _out.push_back(_m[2]);
+            _out.push_back(_m[3]);
+            _out.push_back(_M[0]);
+            _out.push_back(_M[1]);
+            _out.push_back(_M[2]);
+            _out.push_back(_M[3]);
+            return _out;
+        }
+        return {};
+    }
+
+
     std::vector<uint8_t> m_data;
     eComponentType       m_componentType = eComponentType::UNKNOWN;
     eType                m_type = eType::UNKNOWN;
@@ -1145,3 +1233,4 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
 }
 
 #endif
+
