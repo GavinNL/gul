@@ -166,10 +166,16 @@ public:
     {
         return m_node.size();
     }
-    void erase(value_type const & v)
+
+    bool erase(value_type const & v)
     {
-        auto & X = m_objPosition.at(v);
-        X.node->erase(v);
+        auto it = m_objPosition.find(v);
+        if(it != m_objPosition.end())
+        {
+            it->second.node->erase(v);
+            return true;
+        }
+        return false;
     }
 
 
