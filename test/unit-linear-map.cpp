@@ -91,4 +91,26 @@ SCENARIO("Test LinearMap")
 
         }
     }
+
+    THEN("Defragment")
+    {
+        M["Batman"] = D{1,7};
+        M["Superman"] = D{2,8};
+        M["WonderWoman"] = D{3,8};
+        M["GreenLantern"] = D{4,10};
+        M["Flash"] = D{5,11};
+        M["MartianManhunter"] = D{6,12};
+
+        REQUIRE(M.size() == 6);
+        REQUIRE(M.capacity() == 6);
+
+        M.erase("GreenLantern");
+        REQUIRE(M.size() == 5);
+        REQUIRE(M.capacity() == 6);
+
+        M.defragment();
+        REQUIRE(M.size() == 5);
+        REQUIRE(M.capacity() == 5);
+
+    }
 }
