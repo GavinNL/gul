@@ -739,6 +739,7 @@ struct MeshPrimitive
             auto & P = POSITION;
             std::vector< _vec3 > normals(P.attributeCount(), _vec3({0,0,0}));
 
+            auto vC = P.attributeCount();
             auto iC = I.attributeCount();
 
             for(size_t j=0; j< iC; j+=3)
@@ -746,6 +747,10 @@ struct MeshPrimitive
                 auto i0 = I.at<uint32_t>(j);
                 auto i1 = I.at<uint32_t>(j+1);
                 auto i2 = I.at<uint32_t>(j+2);
+
+                assert(i0 < vC);
+                assert(i1 < vC);
+                assert(i2 < vC);
 
                 auto p0 = P.at<_vec3>(i0);
                 auto p1 = P.at<_vec3>(i1);
@@ -784,7 +789,7 @@ struct MeshPrimitive
 
             for(auto & n : normals)
             {
-                auto L = 1.0f / n[0]*n[0] + n[1]*n[1] + n[2]*n[2];
+                auto L = 1.0f / std::sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]);
                 n[0] *= L;
                 n[1] *= L;
                 n[2] *= L;
@@ -1017,6 +1022,85 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
     N.push_back(_vec3{0,0,1});
 
     I = std::vector<uint32_t>{0,1,2,0,2,3};
+
+    return M;
+}
+
+/**
+ * @brief revolve
+ * @param XYpoints - pointer to numPoints*2 float values
+ * @param numPoints - total number of points
+ * @return
+ *
+ * Given a set of points in the XY plane, revolve the curve around
+ * the Z-axis
+ */
+inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t segments=10)
+{
+
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
+
+    MeshPrimitive M;
+
+    std::vector< _vec3 > position;
+    std::vector< _vec3 > normal;
+    std::vector< _vec2 > uv;
+
+    std::vector<uint32_t> indices;
+
+    for(size_t k=0;k<segments+1;k++)
+    {
+        float t = ( float(k) / float(segments-1) );
+        float th = ( float(k) / float(segments) ) * 2.0f * 3.141592653589f;
+
+        for(size_t i=0;i<numPoints;i++)
+        {
+            if(k < segments)
+            {
+                float s = ( float(i) / float(numPoints-1) );
+
+                float R = XYpoints[2*i+1];
+
+                float xp = XYpoints[2*i];
+                float yp = R * std::cos(th);
+                float zp = R * std::sin(th);
+
+                position.push_back( _vec3{{ xp,yp,zp}} );
+                uv.push_back({s,t});
+            }
+        }
+    }
+
+    assert( position.size() == numPoints*segments);
+    auto totalPoints = position.size();
+
+    for(uint32_t k=0;k<segments;k++)
+    {
+        for(uint32_t i=0;i<numPoints-1;i++)
+        {
+            auto a = k     * numPoints + i;
+            auto b = k     * numPoints + i+1;
+
+            auto c = ( (k+1) * numPoints + i  ) % totalPoints;
+            auto d = ( (k+1) * numPoints + i+1) % totalPoints;
+
+            indices.push_back(b);
+            indices.push_back(a);
+            indices.push_back(c);
+
+            indices.push_back(c);
+            indices.push_back(d);
+            indices.push_back(b);
+        }
+    }
+
+
+    M.POSITION   = position;
+    M.INDEX      = indices;
+    M.TEXCOORD_0 = uv;
+
+    M.rebuildNormals();
 
     return M;
 }
