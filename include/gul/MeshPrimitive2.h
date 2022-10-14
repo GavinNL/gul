@@ -100,6 +100,40 @@ struct VertexAttribute
     }
 
     /**
+     * @brief size
+     * @return
+     *
+     * Returns the total number of components in the attribute array.
+     *
+     * If ther are 4 vertices and each vertex has xyz components, the
+     * return value will be 12
+     */
+    size_t size() const
+    {
+        return m_data.size() / getComponentSizeOf(m_componentType);
+    }
+    /**
+     * @brief set
+     * @param index
+     * @param value
+     *
+     * Sets the value of the
+     */
+    template<typename T>
+    void set(size_t index, T const & value)
+    {
+        std::memcpy( m_data.data() + index * getComponentSizeOf(m_componentType) , &value, sizeof(value));
+    }
+
+    template<typename T>
+    T get(size_t index) const
+    {
+        T v;
+        std::memcpy( &v, m_data.data() + index * getComponentSizeOf(m_componentType) , sizeof(v));
+        return v;
+    }
+
+    /**
      * @brief push_back
      * @param v
      *
@@ -199,7 +233,7 @@ struct VertexAttribute
      * @param B
      * @return
      *
-     * Merge B to the end of the attribute vector and return the index
+     * Merge B to the end of the attribute vector and return the byte offset
      * at which the data was merged.
      */
     uint64_t merge(VertexAttribute const& B)
@@ -458,6 +492,7 @@ struct MeshPrimitive
     {
         return INDEX.attributeCount();
     }
+
     size_t vertexCount() const
     {
         return POSITION.attributeCount();
@@ -474,9 +509,12 @@ struct MeshPrimitive
         return dc;
     }
 
-    DrawCall merge(MeshPrimitive const & P)
+    DrawCall merge(MeshPrimitive const & P, bool renumberIndices = false)
     {
         DrawCall dc;
+
+        uint32_t currentVertexCount = static_cast<uint32_t>(this->getVertexCount());
+        uint32_t currentIndexCount  = static_cast<uint32_t>(this->INDEX.size());
 
         dc.indexOffset  = static_cast<int32_t>(indexCount() );
         dc.vertexOffset = static_cast<int32_t>(vertexCount());
@@ -493,8 +531,21 @@ struct MeshPrimitive
             COLOR_0   .merge(P.COLOR_0   );
             JOINTS_0  .merge(P.JOINTS_0  );
             WEIGHTS_0 .merge(P.WEIGHTS_0 );
+
             INDEX     .merge(P.INDEX     );
 
+            if(renumberIndices)
+            {
+                auto C = INDEX.size();
+                for(uint32_t i=currentIndexCount; i<C; i++)
+                {
+                    uint32_t v = INDEX.get<uint32_t>(i) + currentVertexCount;
+                    INDEX.set(i, v);
+                    assert( v == INDEX.get<uint32_t>(i) );
+                }
+
+                dc.vertexOffset = 0;
+            }
             subMeshes.push_back(dc);
             return dc;
         }
@@ -739,6 +790,7 @@ struct MeshPrimitive
             auto & P = POSITION;
             std::vector< _vec3 > normals(P.attributeCount(), _vec3({0,0,0}));
 
+            auto vC = P.attributeCount();
             auto iC = I.attributeCount();
 
             for(size_t j=0; j< iC; j+=3)
@@ -746,6 +798,10 @@ struct MeshPrimitive
                 auto i0 = I.at<uint32_t>(j);
                 auto i1 = I.at<uint32_t>(j+1);
                 auto i2 = I.at<uint32_t>(j+2);
+
+                assert(i0 < vC);
+                assert(i1 < vC);
+                assert(i2 < vC);
 
                 auto p0 = P.at<_vec3>(i0);
                 auto p1 = P.at<_vec3>(i1);
@@ -784,7 +840,7 @@ struct MeshPrimitive
 
             for(auto & n : normals)
             {
-                auto L = 1.0f / n[0]*n[0] + n[1]*n[1] + n[2]*n[2];
+                auto L = 1.0f / std::sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]);
                 n[0] *= L;
                 n[1] *= L;
                 n[2] *= L;
@@ -794,6 +850,50 @@ struct MeshPrimitive
         }
     }
 };
+
+
+/**
+ * @brief translateMesh
+ * @param M
+ * @param x
+ * @param y
+ * @param z
+ *
+ * Adds {x,y,z} to each position value
+ */
+inline void translateMesh(MeshPrimitive & M, float x, float y, float z)
+{
+    auto & pos = M.POSITION;
+
+    auto totalCount = pos.size();
+    auto numComp    = pos.getNumComponents();
+
+    switch(numComp)
+    {
+        case 1:
+            for(uint32_t i=0;i<totalCount;i++)
+            {
+                pos.set<float>(i, pos.get<float>(i)+x);
+            }
+            break;
+        case 2:
+            for(uint32_t i=0;i<totalCount;i+=2)
+            {
+                pos.set<float>(i, pos.get<float>(i)+x);
+                pos.set<float>(i+1, pos.get<float>(i+1)+y);
+            }
+            break;
+        case 3:
+            for(uint32_t i=0;i<totalCount;i+=3)
+            {
+                pos.set<float>(i, pos.get<float>(i)+x);
+                pos.set<float>(i+1, pos.get<float>(i+1)+y);
+                pos.set<float>(i+2, pos.get<float>(i+2)+z);
+            }
+            break;
+    }
+}
+
 
 inline MeshPrimitive Box(float dx , float dy , float dz )
 {
@@ -932,6 +1032,7 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
     return M;
 }
 
+
 inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=20)
 {
     using _vec2 = std::array<float,2>;
@@ -983,6 +1084,135 @@ inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=2
     return M;
 }
 
+inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
+{
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
+
+    MeshPrimitive M;
+
+
+    std::vector<_vec3>    P;// = M.POSITION;  //[ vka2::PrimitiveAttribute::POSITION ];
+    std::vector<_vec3>    N;// = M.NORMAL;    //[ vka2::PrimitiveAttribute::NORMAL ];
+    std::vector<_vec2>    U;// = M.TEXCOORD_0;//[ vka2::PrimitiveAttribute::TEXCOORD_0 ];
+    std::vector<uint32_t> I;// = M.INDEX;
+
+
+    float dt = 2.0f * 3.141592653589f / static_cast<float>(rSegments);
+
+    float t = 0;
+    if(1)
+    {
+        for(uint32_t r=0 ; r<rSegments; r++)
+        {
+            _vec3 p{  R*std::cos(t) ,  R * std::sin(t),  0 };
+            t += dt;
+            P.push_back(p);
+            N.push_back( _vec3{ std::cos(t), std::sin(t), 0.f } );
+            U.push_back( _vec2{ t, 0} );
+        }
+
+        for(uint32_t r=0 ; r<rSegments; r++)
+        {
+            _vec3 p{  R*std::cos(t) ,  R * std::sin(t),  H };
+            t += dt;
+            P.push_back(p);
+            N.push_back( _vec3{ std::cos(t), std::sin(t), 0.f } );
+            U.push_back( _vec2{ t, 1} );
+        }
+
+
+        for(uint32_t i=0 ; i < rSegments; ++i)
+        {
+            const uint32_t a = (i + 0) % rSegments;
+            const uint32_t b = (i + 1) % rSegments;
+            const uint32_t c = b + rSegments;
+
+            const uint32_t d = a + rSegments;
+
+            I.push_back( static_cast<uint32_t>(a) );
+            I.push_back( static_cast<uint32_t>(b) );
+            I.push_back( static_cast<uint32_t>(c) );
+
+            I.push_back( static_cast<uint32_t>(a) );
+            I.push_back( static_cast<uint32_t>(c) );
+            I.push_back( static_cast<uint32_t>(d) );
+        }
+
+        M.INDEX = I;
+        M.POSITION = P;
+        M.NORMAL = N;
+        M.TEXCOORD_0 = U;
+    }
+
+
+    if(1)
+    { // top cap
+
+        MeshPrimitive M2;
+
+        std::vector<_vec3>     P2;// = M2.POSITION;  //[ vka2::PrimitiveAttribute::POSITION ];
+        std::vector<_vec3>     N2;// = M2.NORMAL;    //[ vka2::PrimitiveAttribute::NORMAL ];
+        std::vector<_vec2>     U2;// = M2.TEXCOORD_0;//[ vka2::PrimitiveAttribute::TEXCOORD_0 ];
+        std::vector<std::array<uint32_t,3> >  I2;// = M2.INDEX;
+
+        t = 0;
+        P2.push_back( _vec3{ 0.f, 0.f, H});
+        N2.push_back( _vec3{ 0.f, 0.f, 1.f } );
+        U2.push_back( _vec2{ 0.5f, 0.5f } );
+
+        for(uint32_t r=0 ; r < rSegments; r++)
+        {
+            _vec3 p{  R * std::cos(t) ,  R * std::sin(t),  H };
+            t += dt;
+            P2.push_back(p);
+            N2.push_back( _vec3{ 0.f, 0.f, 1.f } );
+            U2.push_back( _vec2{ 0.5f+std::cos(t), 0.5f+std::sin(t)} );
+
+            const uint32_t A = 0;
+            const uint32_t B = static_cast<uint32_t>(r+1);
+            const uint32_t C = static_cast<uint32_t>( (r+1)%rSegments+1 );
+
+            I2.push_back( std::array<uint32_t,3>({A,B,C}));
+        }
+
+        M2.POSITION   = P2;
+        M2.NORMAL     = N2;
+        M2.TEXCOORD_0 = U2;
+        M2.INDEX      = I2;
+
+        M.merge(M2, true);
+
+        // bottom cap.
+        if(1)
+        {
+            for(auto & p : P2)
+                p[2] = 0.0f;
+
+            for(auto & p : N2) // flip normals
+            {
+                p[0] *= -1.f;
+                p[1] *= -1.f;
+                p[2] *= -1.f;
+            }
+            for(auto & p : I2) // reverse winding order
+            {
+                std::swap(p[0], p[2]);
+            }
+
+            M2.INDEX = I2;
+            M2.POSITION = P2;
+            M2.NORMAL = N2;
+            M2.TEXCOORD_0 = U2;
+
+            M.merge(M2, true);
+        }
+
+    }
+
+    return M;
+}
+
 /**
  * @brief Imposter
  * @return
@@ -1020,6 +1250,123 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
 
     return M;
 }
+
+/**
+ * @brief revolve
+ * @param XYpoints - pointer to numPoints*2 float values
+ * @param numPoints - total number of points
+ * @return
+ *
+ * Given a set of points in the XY plane, revolve the curve around
+ * the Z-axis
+ */
+inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t segments=10)
+{
+
+    using _vec2 = std::array<float,2>;
+    using _vec3 = std::array<float,3>;
+
+    MeshPrimitive M;
+
+    std::vector< _vec3 > position;
+    std::vector< _vec3 > normal;
+    std::vector< _vec2 > uv;
+
+    std::vector<uint32_t> indices;
+
+    for(size_t k=0;k<segments+1;k++)
+    {
+        float t = ( float(k) / float(segments-1) );
+        float th = ( float(k) / float(segments) ) * 2.0f * 3.141592653589f;
+
+        for(size_t i=0;i<numPoints;i++)
+        {
+            if(k < segments)
+            {
+                float s = ( float(i) / float(numPoints-1) );
+
+                float R = XYpoints[2*i+1];
+
+                float xp = XYpoints[2*i];
+                float yp = R * std::cos(th);
+                float zp = R * std::sin(th);
+
+                position.push_back( _vec3{{ xp,yp,zp}} );
+                uv.push_back({s,t});
+            }
+        }
+    }
+
+    assert( position.size() == numPoints*segments);
+    auto totalPoints = position.size();
+
+    for(uint32_t k=0;k<segments;k++)
+    {
+        for(uint32_t i=0;i<numPoints-1;i++)
+        {
+            auto a = k     * numPoints + i;
+            auto b = k     * numPoints + i+1;
+
+            auto c = ( (k+1) * numPoints + i  ) % totalPoints;
+            auto d = ( (k+1) * numPoints + i+1) % totalPoints;
+
+            indices.push_back(b);
+            indices.push_back(a);
+            indices.push_back(c);
+
+            indices.push_back(c);
+            indices.push_back(d);
+            indices.push_back(b);
+        }
+    }
+
+
+    M.POSITION   = position;
+    M.INDEX      = indices;
+    M.TEXCOORD_0 = uv;
+
+    M.rebuildNormals();
+
+    return M;
+}
+
+
+inline MeshPrimitive Arrow(float bodyLength, float bodyRadius, float headLength, float headRadius)
+{
+    auto bl = bodyLength;
+    auto br = bodyRadius;
+    auto hl = headLength;
+    auto hr = headRadius;
+
+    std::vector<float> points;
+
+    points.push_back( 0 );
+    points.push_back( 0 );
+
+    points.push_back( 0 );
+    points.push_back( br );
+
+    points.push_back( 0 );
+    points.push_back( br );
+
+    points.push_back( bl );
+    points.push_back( br );
+
+    points.push_back( bl );
+    points.push_back( br );
+
+    points.push_back( bl );
+    points.push_back( hr );
+
+    points.push_back( bl );
+    points.push_back( hr );
+
+    points.push_back( hl+bl );
+    points.push_back( 0 );
+
+    return revolve(points.data(), points.size()/2, 10 );
+}
+
 
 inline MeshPrimitive ReadOBJ(std::ifstream & in)
 {
