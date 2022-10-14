@@ -192,7 +192,7 @@ public:
      *
      * dirPath must be a relative path
      */
-    std::vector<fs::path> listDirectory( fs::path const & dirPath) const
+    std::vector<fs::path> listDirectory( fs::path const & dirPath, fs::directory_options opt = fs::directory_options::none) const
     {
         auto absDirPath = locate(dirPath);
         if( !fs::is_directory(absDirPath) )
@@ -200,7 +200,7 @@ public:
             throw std::runtime_error("Must be a directory path");
         }
         std::vector<fs::path> out;
-        for(auto& p: fs::directory_iterator( absDirPath ) )
+        for(auto& p: fs::directory_iterator( absDirPath, opt ) )
         {
             out.push_back( p );
         }
@@ -250,7 +250,7 @@ public:
      * /tmp/B/File1 will not be returned because it is shadowded
      * by a previous root path
      */
-    std::vector<fs::path> listDirectoryUnion( fs::path const & relPath) const
+    std::vector<fs::path> listDirectoryUnion( fs::path const & relPath, fs::directory_options opt = fs::directory_options::none) const
     {
         // locate all the paths that match ROOT[i]/relPath
         auto validDirs = locateAll(relPath);
@@ -266,7 +266,7 @@ public:
 
             if( fs::is_directory(dirPath))
             {
-                for(auto & p: fs::directory_iterator( dirPath ) )
+                for(auto & p: fs::directory_iterator( dirPath, opt ) )
                 {
                     auto leaf = p.path().string().erase(0,n+1);
                     if( found.insert(leaf).second == true)
