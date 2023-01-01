@@ -8,6 +8,8 @@
 #include <optional>
 #include <atomic>
 #include <any>
+#include <map>
+#include <unordered_map>
 
 // C++17 includes the <filesystem> library, but
 // unfortunately gcc7 does not have a finalized version of it
@@ -54,9 +56,38 @@ template<typename T>
 struct SingleResourceManager;
 
 template<typename T>
+struct Resource_t;
+
+template<typename T>
+using ResourceID = std::shared_ptr<Resource_t<T>>;
+
+template<typename T>
+using wResourceID = std::weak_ptr<Resource_t<T>>;
+
+
+template<typename T>
+struct SingleResourceManagerData
+{
+    using resource_type = T;
+    using resource_handle  = ResourceID<resource_type>;
+
+    using loader_function   = std::function<T(gul::uri const &)>;
+    using unloader_function = std::function<void(resource_handle)>;
+
+    std::vector< std::function<bool(resource_handle)> >   m_onLoadCallbacks;
+    std::vector< std::function<bool(resource_handle)> >   m_onUnloadCallbacks;
+
+    loader_function                 m_loader;
+    unloader_function               m_unloader;
+    std::unordered_map<std::string, ResourceID<T>> m_resources;
+    std::mutex m_mutex;
+};
+
+template<typename T>
 struct Resource_t
 {
     using resource_type = T;
+
 
     Resource_t(gul::uri const & _u) : uri(_u)
     {
@@ -161,6 +192,26 @@ struct Resource_t
     }
 
     /**
+     * @brief unload
+     *
+     * Unloads the resource and calls any callback functions
+     */
+    void unload()
+    {
+        if(isLoaded())
+        {
+            auto self = m_self.lock();
+            auto it = std::remove_if(m_data->m_onUnloadCallbacks.begin(), m_data->m_onUnloadCallbacks.end(),[self = m_self.lock()](auto &V)
+            {
+                return V(self);
+            });
+            m_data->m_onUnloadCallbacks.erase(it, m_data->m_onUnloadCallbacks.end());
+            value.reset();
+            m_unloadLater = false;
+        }
+    }
+
+    /**
      * @brief loadBackground
      *
      * gets a functional object which can be called on a different thread
@@ -173,10 +224,17 @@ struct Resource_t
         {
             this->setIsLoading(true);
 
-            auto v = (*m_loader)(uri);
+            auto v = (m_data->m_loader)(uri);
             emplace_resource( std::move(v) );
 
             this->setIsLoading(false);
+
+
+            auto it = std::remove_if(m_data->m_onLoadCallbacks.begin(), m_data->m_onLoadCallbacks.end(),[self = m_self.lock()](auto &V)
+            {
+                return V(self);
+            });
+            m_data->m_onLoadCallbacks.erase(it, m_data->m_onLoadCallbacks.end());
         };
     }
 
@@ -188,12 +246,12 @@ struct Resource_t
      */
     auto loadCopy() const
     {
-        return (*m_loader)(uri);
+        return (m_data->m_loader)(uri);
     }
 
     std::lock_guard<std::mutex> getLockGuard()
     {
-        return std::lock_guard<std::mutex>(*this->m_mutex);
+        return std::lock_guard<std::mutex>(m_data->m_mutex);
     }
 
     auto getLoadTime() const
@@ -233,7 +291,7 @@ struct Resource_t
         }
         if(!value.has_value())
         {
-            value = (*m_loader)(uri);
+            value = (m_data->m_loader)(uri);
         }
         return *value;
     }
@@ -246,16 +304,71 @@ struct Resource_t
     {
         return m_userData;
     }
-protected:
-    using loader_function   = std::function<T(gul::uri const &)>;
-    using unloader_function = std::function<void(std::shared_ptr<Resource_t<T>>)>;
 
+    //================================================================
+    // User Variables: Variables which can be attached to the resource
+    // for user-specific things
+    //================================================================
+    template<typename V>
+    V& setUserVar(std::string const & x, V const & val)
+    {
+        auto & vv = m_userVars[x];
+        vv = val;
+        return std::any_cast<V&>(x);
+    }
+    template<typename V>
+    V& setUserVar(std::string const & x, V && val)
+    {
+        auto & vv = m_userVars[x];
+        vv = std::move(val);
+        return std::any_cast<V&>(x);
+    }
+
+    template<typename V>
+    std::any const & getUserVar(std::string const & x) const
+    {
+        return m_userVars.at(x);
+    }
+    template<typename V>
+    std::any & getUserVar(std::string const & x)
+    {
+        return m_userVars[x];
+    }
+
+    template<typename V>
+    V const & getUserVar(std::string const & x) const
+    {
+        return std::any_cast<V const&>(getUserVar(x));
+    }
+    template<typename V>
+    V & getUserVar(std::string const & x)
+    {
+        return std::any_cast<V&>(getUserVar(x));
+    }
+    void eraseUserVar(std::string const & x)
+    {
+        m_userVars.erase(x);
+    }
+    std::unordered_map<std::string, std::any> const & getUserVars()
+    {
+        return m_userVars;
+    }
+
+    std::unordered_map<std::string, std::any> const & getUserVars() const
+    {
+        return m_userVars;
+    }
+
+
+protected:
+    wResourceID<resource_type> m_self;
+    std::shared_ptr<SingleResourceManagerData<resource_type> > m_data;
     std::optional<T>                                     value;
     gul::uri                                             uri;
-    std::shared_ptr<std::function<T(gul::uri const &C)>> m_loader;
     std::chrono::system_clock::time_point                m_loadTime;
     std::chrono::system_clock::time_point                m_accessTime = std::chrono::system_clock::now(); // the last time this resource was accessed
-    std::shared_ptr<std::mutex>                          m_mutex;
+    //std::vector< std::function<bool(void)> >             m_onLoadCallbacks;
+    std::unordered_map<std::string, std::any>            m_userVars;
 
     bool m_unloadLater         = false;
     bool m_dirty               = true;
@@ -264,10 +377,6 @@ protected:
     std::any m_userData;
     friend struct SingleResourceManager<T>;
 };
-
-template<typename T>
-using ResourceID = std::shared_ptr<Resource_t<T>>;
-
 
 /**
  * @brief The SingleResourceManager struct
@@ -280,6 +389,10 @@ struct SingleResourceManager
     using resource_type = T;
     using resource_handle  = ResourceID<resource_type>;
 
+    SingleResourceManager()
+    {
+        m_data = std::make_shared<SingleResourceManagerData<resource_type> >();
+    }
     /**
      * @brief findResource
      * @param uri
@@ -291,16 +404,17 @@ struct SingleResourceManager
      */
     resource_handle findResource(gul::uri const & uri)
     {
-        std::lock_guard<std::mutex> L(*m_mutex);
-        auto &r = m_resources[uri.toString()];
+        std::lock_guard<std::mutex> L(m_data->m_mutex);
+        auto &r = m_data->m_resources[uri.toString()];
         if(!r)
         {
             r = std::make_shared< Resource_t<T> >(uri);
-            r->m_loader = m_loader;
-            r->m_mutex  = m_mutex;
+            r->m_data = m_data;
+            r->m_self = r;
         }
         return r;
     }
+
     resource_handle find(gul::uri const & uri)
     {
         return findResource(uri);
@@ -335,29 +449,32 @@ struct SingleResourceManager
     template<typename callable_t>
     void setLoader(callable_t && C)
     {
-        m_loader = std::make_shared<loader_function>();
-        *m_loader = C;
-        for(auto & [a,b] : m_resources)
-        {
-            (void)a;
-            b->m_loader = m_loader;
-        }
+        m_data->m_loader = std::move(C);
+    }
+
+    void insertOnLoadCallback(std::function<bool( resource_handle )> && v)
+    {
+        m_data->m_onLoadCallbacks.push_back(v);
+    }
+    void insertOnUnloadCallback(std::function<bool( resource_handle )> && v)
+    {
+        m_data->m_onUnloadCallbacks.push_back(v);
     }
 
     /**
      * @brief processUnload
      *
-     * Checks if any resources can be unloaded
+     * Checks if any resources can be unloaded and unloads them.
+     * This will call any onUnload callbacks.
      */
     void processUnload()
     {
-        for(auto & [a,b] : m_resources)
+        for(auto & [a,b] : m_data->m_resources)
         {
             (void)a;
             if(b->m_unloadLater)
             {
-                b->value.reset();
-                b->m_unloadLater = false;
+                b->unload();
             }
         }
     }
@@ -365,7 +482,7 @@ struct SingleResourceManager
     template<typename callable_t>
     void forEach(callable_t &&  c)
     {
-        for(auto & [a,b] : m_resources)
+        for(auto & [a,b] : m_data->m_resources)
         {
             c(b);
         }
@@ -373,20 +490,15 @@ struct SingleResourceManager
 
     auto begin()
     {
-        return m_resources.begin();
+        return m_data->m_resources.begin();
     }
     auto end()
     {
-        return m_resources.end();
+        return m_data->m_resources.end();
     }
 
 protected:
-    using loader_function = std::function<T(gul::uri const &)>;
-    using unloader_function = std::function<void(resource_handle)>;
-    std::shared_ptr<loader_function>               m_loader;
-    std::shared_ptr<unloader_function>             m_unloader;
-    std::unordered_map<std::string, ResourceID<T>> m_resources;
-    std::shared_ptr<std::mutex>                    m_mutex = std::make_shared<std::mutex>();
+    std::shared_ptr<SingleResourceManagerData<resource_type> > m_data;
 };
 
 class ResourceManager
@@ -451,7 +563,8 @@ public:
         if(!f)
         {
             f = std::make_shared< SingleResourceManager<T> >();
-            std::static_pointer_cast< void >(f);
+            m_singleResources[i] = std::static_pointer_cast< void >(f);
+            return getSingleResourceManager<T>();
         }
         return std::static_pointer_cast< SingleResourceManager<T> >(f);
     }
