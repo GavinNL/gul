@@ -3,40 +3,52 @@ image:
 
 environment:
   matrix:
-    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
-      platform: x64
-      FLAGS: "/std:c++latest"
-      GENERATOR: Visual Studio 14 2015 Win64
+#    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+#      platform: x64
+#      FLAGS: "/std:c++latest"
+#      GENERATOR: Visual Studio 14 2015 Win64
+#      PYTHON: "C:\\Python36-x64"
+#      PYTHON_ARCH: "64"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
       platform: x64
       FLAGS: "/permissive- /std:c++latest /utf-8"
       GENERATOR: Visual Studio 15 2017 Win64
+      PYTHON: "C:\\Python36-x64"
+      PYTHON_ARCH: "64"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
       platform: x64
       FLAGS: "/permissive- /std:c++latest /utf-8"
       GENERATOR: Visual Studio 16 2019
+      PYTHON: "C:\\Python36-x64"
+      PYTHON_ARCH: "64"
 
 clone_folder: c:\projects\source
 
+install:
+    - set PATH=C:\Users\appveyor\AppData\Roaming\Python\Python36\Scripts;%PYTHON%;%PYTHON%/Scripts/;%PATH%
+    - where python
+    - python -m pip install --upgrade pip
+    - python -m pip install conan --user
+    - dir "%PYTHON%/Scripts"
+    - conan user
+    - conan --version
+    
+
+#build_script:
+#  - cmd: mkdir build
+#  - cmd: conan install . -o gtest:shared=True
+#  - cmd: cd build
+#  - cmd: cmake ../ -DBUILD_TEST=TRUE  -G "Visual Studio 14 2015 Win64"
+#  - cmd: cmake --build . --config Release
+
 build_script:
-- cmd: >-
-    mkdir build
-
-    cd build
-
-    IF EXIST "C:\projects\source\conanfile.txt" pip install --user conan
-
-    IF EXIST "C:\projects\source\conanfile.txt" set PATH=%PATH%;C:\Users\appveyor\AppData\Roaming\Python\Scripts
-
-    IF EXIST "C:\projects\source\conanfile.txt" conan remote add bincrafters https://api.bintray.com/conan/bincrafters/public-conan
-
-    IF EXIST "C:\projects\source\conanfile.txt" conan install c:\projects\source --build
-
-    cmake c:\projects\source -G "%GENERATOR%" -DCMAKE_BUILD_TYPE:STRING=Release
-
-    cmake --build . --config "Release"
+   - mkdir build
+   - cd build
+   - conan install ../ --build
+   - cmake ../ -G "%GENERATOR%" -DCMAKE_BUILD_TYPE:STRING=Release
+   - cmake --build . --config "Release"
 
 test_script:
 - cmd: >-
