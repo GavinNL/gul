@@ -128,8 +128,8 @@ SCENARIO("Resource Manager")
     {
         std::ifstream t(_uri.path);
         TextResource R;
-        R.data = std::string((std::istreambuf_iterator<char>(t)),
-                              std::istreambuf_iterator<char>());
+        R.data = std::string((std::istreambuf_iterator<std::string::value_type>(t)),
+                              std::istreambuf_iterator<std::string::value_type>());
         return R;
     });
     RM.setLoader<IntResource>([](uri const & _uri)

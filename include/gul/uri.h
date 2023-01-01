@@ -7,6 +7,8 @@
 #include<stdexcept>
 #include<algorithm>
 #include<locale>
+#include<cctype>
+
 
 namespace gul
 {
