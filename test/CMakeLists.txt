@@ -66,9 +66,11 @@ foreach(file ${files})
 
     target_link_libraries( ${EXE_NAME}
                                 PRIVATE
+                                    -lstdc++fs
                                     ${PROJECT_NAME}-catchmain
                                     ${PROJECT_NAME}
                                     Threads::Threads
+                                    CONAN_PKG::nlohmann_json
                                     CONAN_PKG::glm
                                     CONAN_PKG::stb)
 

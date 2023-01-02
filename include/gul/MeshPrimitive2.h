@@ -30,13 +30,183 @@ enum class eComponentType : uint32_t
 
 enum class eType : uint32_t
 {
-    UNKNOWN = 0,
-    SCALAR  = 1,
-    VEC2    = 2,
-    VEC3    = 3,
-    VEC4    = 4
+    //           rows         columns
+    UNKNOWN = 0x00000000 | 0x00000000,
+    SCALAR  = 0x00000100 | 0x00000001,
+    VEC2    = 0x00000100 | 0x00000002,
+    VEC3    = 0x00000100 | 0x00000003,
+    VEC4    = 0x00000100 | 0x00000004,
+    MAT2    = 0x00000200 | 0x00000002,
+    MAT3    = 0x00000300 | 0x00000003,
+    MAT4    = 0x00000400 | 0x00000004
 };
 
+constexpr const char* to_string(eComponentType t)
+{
+    switch(t)
+    {
+        default:
+        case eComponentType::UNKNOWN       : return "UNKNOWN";
+        case eComponentType::BYTE          : return "BYTE";
+        case eComponentType::UNSIGNED_BYTE : return "UNSIGNED_BYTE";
+        case eComponentType::SHORT         : return "SHORT";
+        case eComponentType::UNSIGNED_SHORT: return "UNSIGNED_SHORT";
+        case eComponentType::INT           : return "INT";
+        case eComponentType::UNSIGNED_INT  : return "UNSIGNED_INT";
+        case eComponentType::FLOAT         : return "FLOAT";
+        case eComponentType::DOUBLE        : return "DOUBLE";
+    }
+}
+
+constexpr const char* to_string(eType t)
+{
+    switch(t)
+    {
+        default:
+        case eType::UNKNOWN: return "UNKNOWN";
+        case eType::SCALAR : return "SCALAR";
+        case eType::VEC2   : return "VEC2";
+        case eType::VEC3   : return "VEC3";
+        case eType::VEC4   : return "VEC4";
+        case eType::MAT2   : return "MAT2";
+        case eType::MAT3   : return "MAT3";
+        case eType::MAT4   : return "MAT4";
+    }
+}
+
+/**
+ * @brief row_type
+ * @param c
+ * @return
+ *
+ * Returns the row type
+ */
+constexpr eType row_type(eType c)
+{
+    switch ( c )
+    {
+        case eType::UNKNOWN: return eType::UNKNOWN;
+        case eType::SCALAR : return eType::UNKNOWN;
+        case eType::VEC2   : return eType::SCALAR;
+        case eType::VEC3   : return eType::SCALAR;
+        case eType::VEC4   : return eType::SCALAR;
+        case eType::MAT2   : return eType::VEC2;
+        case eType::MAT3   : return eType::VEC3;
+        case eType::MAT4   : return eType::VEC4;
+    }
+    return eType::UNKNOWN;
+}
+
+constexpr uint32_t component_row_count(eType c)
+{
+    return (static_cast<uint32_t>(c) & 0x000000FF);
+}
+
+constexpr uint32_t component_column_count(eType c)
+{
+    return ( (static_cast<uint32_t>(c) >> 8) & 0x000000FF);
+}
+
+constexpr uint32_t component_count(eType c)
+{
+    return component_row_count(c) * component_column_count(c);
+}
+
+constexpr uint32_t component_size(eComponentType c)
+{
+    switch(c)
+    {
+        case gul::eComponentType::BYTE:
+        case gul::eComponentType::UNSIGNED_BYTE: return 1;
+        case gul::eComponentType::SHORT:
+        case gul::eComponentType::UNSIGNED_SHORT: return 2;
+        case gul::eComponentType::INT:
+        case gul::eComponentType::UNSIGNED_INT:
+        case gul::eComponentType::FLOAT: return 4;
+        case gul::eComponentType::DOUBLE: return 8;
+        default:
+            return 0;
+    }
+}
+
+template<typename T>
+constexpr eComponentType type_to_component()
+{
+    if constexpr ( std::is_arithmetic_v<T> )
+    {
+        if constexpr (std::is_same_v<T, int8_t>) return eComponentType::BYTE;
+        else if constexpr (std::is_same_v<T, uint8_t>) return eComponentType::UNSIGNED_BYTE;
+        else if constexpr (std::is_same_v<T, int16_t>) return eComponentType::SHORT;
+        else if constexpr (std::is_same_v<T, uint16_t>) return eComponentType::UNSIGNED_SHORT;
+        else if constexpr (std::is_same_v<T, int32_t>) return eComponentType::INT;
+        else if constexpr (std::is_same_v<T, uint32_t>) return eComponentType::UNSIGNED_INT;
+        else if constexpr (std::is_same_v<T, float>) return eComponentType::FLOAT;
+        else if constexpr (std::is_same_v<T, double>) return eComponentType::DOUBLE;
+        else
+        {
+            return eComponentType::UNKNOWN;
+        }
+    }
+    else
+    {
+        return type_to_component<typename T::value_type>();
+    }
+}
+
+template<typename T>
+constexpr eType type_to_type()
+{
+    if constexpr ( std::is_arithmetic_v<T>)
+    {
+        return eType::SCALAR;
+    }
+    else
+    {
+        constexpr auto component = type_to_component<T>();
+        constexpr auto size      = component_size(component);
+        // either a vec4 or a mat2
+        if constexpr ( sizeof(T) / size == 4 )
+        {
+            struct S
+            {
+                auto operator()()
+                {
+                    return T()[0];
+                }
+            };
+
+            //std::invoke_result
+            if constexpr( std::is_arithmetic_v< typename std::invoke_result<S>::type> )
+            {
+                return eType::VEC4;
+            }
+            else
+            {
+                return eType::MAT2;
+            }
+        }
+        else
+        {
+            switch ( sizeof(T) / size)
+            {
+                case 1:
+                    return eType::SCALAR;
+                case 2:
+                    return eType::VEC2;
+                case 3:
+                    return eType::VEC3;
+                case 4:
+                    return eType::VEC4;
+                case 9:
+                    return eType::MAT3;
+                case 16:
+                    return eType::MAT4;
+                default:
+                    return eType::UNKNOWN;
+            }
+        }
+    }
+}
 
 /**
  * @brief The VertexAttribute struct
@@ -62,6 +232,28 @@ struct VertexAttribute
         m_componentType = c;
         m_type = t;
     }
+
+    template<typename T>
+    VertexAttribute( std::vector<T> const & V)
+    {
+        using container_type = std::decay_t<decltype(V) >;
+        using attribute_type = typename container_type::value_type;
+
+        m_componentType = type_to_component<attribute_type>();
+        m_type = type_to_type<attribute_type>();
+        m_data.resize( getAttributeSize() * V.size() );
+        std::memcpy(m_data.data(), V.data(), m_data.size());
+    }
+
+
+    void dump(std::ostream & out, std::string name)
+    {
+        out.write(name.data(), static_cast<std::streamsize>(name.size()));
+        out.write(reinterpret_cast<const char*>(&m_componentType), sizeof(m_componentType));
+        out.write(reinterpret_cast<const char*>(&m_type), sizeof(m_type));
+        out.write(reinterpret_cast<const char*>(m_data.data()), static_cast<std::streamsize>(m_data.size()));
+    }
+
     /**
      * @brief init
      * @param c
@@ -77,13 +269,25 @@ struct VertexAttribute
     }
 
     template<typename T>
-    VertexAttribute& operator=(std::vector<T> const & v)
+    VertexAttribute& operator=(std::vector<T> const & V)
     {
-        m_data.resize( v.size() * sizeof(T));
-        std::memcpy(m_data.data(), v.data(), m_data.size());
+        using container_type = std::decay_t<decltype(V) >;
+        using attribute_type = typename container_type::value_type;
+
+        m_componentType = type_to_component<attribute_type>();
+        m_type = type_to_type<attribute_type>();
+        m_data.resize( getAttributeSize() * V.size() );
+        std::memcpy(m_data.data(), V.data(), m_data.size());
         return *this;
     }
 
+    template<typename T>
+    std::vector<T> toVector() const
+    {
+        std::vector<T> data( m_data.size() / sizeof(T));
+        std::memcpy(data.data(), m_data.data(), sizeof(T)*data.size());
+        return data;
+    }
     /**
      * @brief at
      * @param i
@@ -95,8 +299,55 @@ struct VertexAttribute
     T at(size_t index, size_t componentIndex=0) const
     {
         T v;
-        std::memcpy(&v, m_data.data() + index * getAttributeSize() + componentIndex * getComponentSizeOf(m_componentType), sizeof(T));
+        std::memcpy(&v, m_data.data() + index * getAttributeSize() + componentIndex * component_size(m_componentType), sizeof(T));
         return v;
+    }
+
+    /**
+     * @brief get
+     * @param index
+     * @return
+     *
+     * Treats the VertexAttribute as a vector<T> and returns
+     * the index into that vector
+     */
+    template<typename T>
+    T get(size_t index) const
+    {
+        T v;
+        std::memcpy(&v, m_data.data() + index * sizeof(T), sizeof(T));
+        return v;
+    }
+
+
+    /**
+     * @brief getAttributeAs
+     * @param index
+     * @return
+     *
+     * different from get(), return's the attribute specified by index,
+     * the a
+     */
+    template<typename T>
+    T getAttributeAs(size_t index) const
+    {
+        T v;
+        std::memcpy(&v, m_data.data() + index * getAttributeSize(), sizeof(T));
+        return v;
+    }
+
+    /**
+     * @brief set
+     * @param index
+     * @param v
+     *
+     * Treats the VertexAttribute as a vector<T> and sets
+     * vertexAttribute[index] = v
+     */
+    template<typename T>
+    void set(size_t index, T const &v)
+    {
+        std::memcpy(m_data.data() + index*sizeof(T), &v, sizeof(T));
     }
 
     /**
@@ -110,27 +361,7 @@ struct VertexAttribute
      */
     size_t size() const
     {
-        return m_data.size() / getComponentSizeOf(m_componentType);
-    }
-    /**
-     * @brief set
-     * @param index
-     * @param value
-     *
-     * Sets the value of the
-     */
-    template<typename T>
-    void set(size_t index, T const & value)
-    {
-        std::memcpy( m_data.data() + index * getComponentSizeOf(m_componentType) , &value, sizeof(value));
-    }
-
-    template<typename T>
-    T get(size_t index) const
-    {
-        T v;
-        std::memcpy( &v, m_data.data() + index * getComponentSizeOf(m_componentType) , sizeof(v));
-        return v;
+        return attributeCount() * getNumComponents();
     }
 
     /**
@@ -167,26 +398,70 @@ struct VertexAttribute
     }
     uint32_t getNumComponents() const
     {
-        return static_cast<uint32_t>(m_type);
+        return component_count(m_type);
     }
-
-    static uint32_t getComponentSizeOf(eComponentType c)
+    std::array<uint32_t,2> getShape() const
     {
-        switch(c)
-        {
-            case gul::eComponentType::BYTE:
-            case gul::eComponentType::UNSIGNED_BYTE: return 1;
-            case gul::eComponentType::SHORT:
-            case gul::eComponentType::UNSIGNED_SHORT: return 2;
-            case gul::eComponentType::INT:
-            case gul::eComponentType::UNSIGNED_INT:
-            case gul::eComponentType::FLOAT: return 4;
-            case gul::eComponentType::DOUBLE: return 8;
-            default:
-                return 0;
-        }
+        return { static_cast<uint32_t>(attributeCount()), getNumComponents()};
     }
 
+    /**
+     * @brief convertTo32BitInteger
+     *
+     * Used only for uint and ints. Converts a lower
+     * bit value into the 32 bit equivelant
+     */
+    bool convertTo32BitInteger()
+    {
+        auto totalComponents = attributeCount() * getNumComponents();
+
+        if(getComponentType() == eComponentType::UNSIGNED_BYTE)
+        {
+            VertexAttribute newData(eComponentType::UNSIGNED_INT, getType());
+            for(uint32_t i=0;i<totalComponents;i++)
+            {
+                newData.push_back<uint32_t>(get<uint8_t>(i));
+            }
+            *this = std::move(newData);
+            return true;
+        }
+        if(getComponentType() == eComponentType::UNSIGNED_SHORT)
+        {
+            VertexAttribute newData(eComponentType::UNSIGNED_INT, getType());
+            for(uint32_t i=0;i<totalComponents;i++)
+            {
+                newData.push_back<uint32_t>(get<uint16_t>(i));
+            }
+            *this = std::move(newData);
+            return true;
+        }
+        if(getComponentType() == eComponentType::BYTE)
+        {
+            VertexAttribute newData(eComponentType::INT, getType());
+            for(uint32_t i=0;i<totalComponents;i++)
+            {
+                newData.push_back<int32_t>(get<int8_t>(i));
+            }
+            *this = std::move(newData);
+            return true;
+        }
+        if(getComponentType() == eComponentType::SHORT)
+        {
+            VertexAttribute newData(eComponentType::INT, getType());
+            for(uint32_t i=0;i<totalComponents;i++)
+            {
+                newData.push_back<int32_t>(get<int16_t>(i));
+            }
+            *this = std::move(newData);
+            return true;
+        }
+        return false;
+    }
+
+    void* data()
+    {
+        return m_data.data();
+    }
     /**
      * @brief getAttributeSize
      * @return
@@ -196,7 +471,7 @@ struct VertexAttribute
      */
     uint32_t getAttributeSize() const
     {
-        return getComponentSizeOf(m_componentType) * getNumComponents();
+        return component_size(m_componentType) * component_count(m_type);
     }
 
     uint64_t getByteSize() const
@@ -212,9 +487,20 @@ struct VertexAttribute
      */
     uint64_t attributeCount() const
     {
-        return m_data.size() / getAttributeSize();
+        auto s = getAttributeSize();
+        return s == 0 ? 0 : m_data.size() / s;
     }
 
+    /**
+     * @brief resize
+     * @param attrCount
+     *
+     * Resize the attribute vector to be able to hold attrCount attributes
+     */
+    void resize(size_t attrCount)
+    {
+        m_data.resize( attrCount * getAttributeSize() );
+    }
     /**
      * @brief canMerge
      * @param B
@@ -266,12 +552,85 @@ struct VertexAttribute
         auto c = attributeCount();
         auto s = getAttributeSize();
 
+        auto d_in  = static_cast<uint8_t const*>(m_data.data());
         auto d_out = static_cast<uint8_t*>(data);
         for(uint64_t i=0;i<c;i++)
         {
-            std::memcpy(d_out, &m_data[i], s);
+            std::memcpy(d_out, d_in, s);
             d_out += stride;
+            d_in  += s;
         }
+    }
+
+
+    /**
+     * @brief strideCopyOffset
+     * @param dstData - the start of the destination to copy to
+     * @param dstByteStride - how many bytes to skip after copying each attribute
+     * @param dstByteOffset - the offset from the start of dstData to start copying to
+     *
+     * @param srcStartAttributeIndex - which index in the source attribute to start copying from
+     * @param attributeCountToCopy - number of attributes to copy
+     * @return
+     *
+     * Copies the attribute data to dstData+dstByteOffset
+     */
+    uint64_t strideCopyOffset(void * dstData,
+                              uint64_t dstByteStride,
+                              uint64_t dstByteOffset,
+
+                              uint64_t srcStartAttributeIndex,
+                              uint64_t attributeCountToCopy = std::numeric_limits<uint64_t>::max()) const
+    {
+        auto c = std::min(attributeCount(), attributeCountToCopy);
+        auto srcAttrSize = getAttributeSize();
+
+        auto d_in  = static_cast<uint8_t const*>(m_data.data()) + srcStartAttributeIndex * srcAttrSize;
+        auto d_in_end = std::min(d_in + srcAttrSize * attributeCountToCopy, &m_data.back()+1);
+
+        auto d_out = static_cast<uint8_t*>(dstData) + dstByteOffset;
+
+        while(d_in < d_in_end)
+        {
+            std::memcpy(d_out, d_in, srcAttrSize);
+
+            d_out += dstByteStride;
+            d_in  += srcAttrSize;
+        }
+        return c;
+    }
+
+    /**
+     * @brief strideCopy
+     * @param data
+     * @param n
+     * @param offset
+     * @param stride
+     * @param num
+     *
+     * Copies num attributes into memory starting at data+offset with a specific stride.
+     *
+     * For example
+     *
+     *  <-offset-> <--stride-->
+     * [          | A1 |       | A2 |        | A3 |       ]
+     *  ^--data
+     */
+    [[deprecated]] uint64_t strideCopy(void * data, uint64_t stride, uint64_t offset, uint64_t num = std::numeric_limits<uint64_t>::max()) const
+    {
+        auto c = std::min(attributeCount(), num);
+        auto s = getAttributeSize();
+
+        auto d_in  = static_cast<uint8_t const*>(m_data.data());
+        auto d_out = static_cast<uint8_t*>(data)+offset;
+
+        for(uint64_t i=0;i<c;i++)
+        {
+            std::memcpy(d_out, d_in, s);
+            d_out += stride;
+            d_in  += s;
+        }
+        return c;
     }
 
     void clear()
@@ -279,99 +638,94 @@ struct VertexAttribute
         m_data.clear();
     }
 
-    template<typename T>
-    std::vector<T> getMinMax() const
+    void setType(eType t)
     {
-        auto & V = *this;
-        std::vector<T> _out;
-        auto count = V.attributeCount();
-        T _m[] = {std::numeric_limits<T>::max(),std::numeric_limits<T>::max(),std::numeric_limits<T>::max(),std::numeric_limits<T>::max()};
-        T _M[] = {std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest(),std::numeric_limits<T>::lowest()};
-
-        switch(V.getType())
-        {
-        case gul::eType::UNKNOWN:
-            break;
-        case gul::eType::SCALAR:
-            for(uint32_t i=0;i<count;i++)
-            {
-                auto val = V.at<T>(i,0);
-                _m[0] = std::min(val, _m);
-                _M[0] = std::max(val, _M);
-            }
-            _out.push_back(_m[0]);
-            _out.push_back(_M[1]);
-            return _out;
-        case gul::eType::VEC2:
-            for(uint32_t i=0;i<count;i++)
-            {
-                auto val0 = V.at<T>(i,0);
-                auto val1 = V.at<T>(i,1);
-                _m[0] = std::min(val0, _m[0]);
-                _m[1] = std::min(val1, _m[1]);
-                _M[0] = std::max(val0, _M[0]);
-                _M[1] = std::min(val1, _M[1]);
-            }
-            _out.push_back(_m[0]);
-            _out.push_back(_m[1]);
-            _out.push_back(_M[0]);
-            _out.push_back(_M[1]);
-            return _out;
-        case gul::eType::VEC3:
-            for(uint32_t i=0;i<count;i++)
-            {
-                auto val0 = V.at<T>(i,0);
-                auto val1 = V.at<T>(i,1);
-                auto val2 = V.at<T>(i,2);
-                _m[0] = std::min(val0, _m[0]);
-                _m[1] = std::min(val1, _m[1]);
-                _m[2] = std::min(val2, _m[2]);
-                _M[0] = std::max(val0, _M[0]);
-                _M[1] = std::min(val1, _M[1]);
-                _M[2] = std::min(val2, _M[2]);
-            }
-            _out.push_back(_m[0]);
-            _out.push_back(_m[1]);
-            _out.push_back(_m[2]);
-            _out.push_back(_M[0]);
-            _out.push_back(_M[1]);
-            _out.push_back(_M[2]);
-            return _out;
-        case gul::eType::VEC4:
-            for(uint32_t i=0;i<count;i++)
-            {
-                auto val0 = V.at<T>(i,0);
-                auto val1 = V.at<T>(i,1);
-                auto val2 = V.at<T>(i,2);
-                auto val3 = V.at<T>(i,3);
-                _m[0] = std::min(val0, _m[0]);
-                _m[1] = std::min(val1, _m[1]);
-                _m[2] = std::min(val2, _m[2]);
-                _m[3] = std::min(val2, _m[3]);
-                _M[0] = std::max(val0, _M[0]);
-                _M[1] = std::min(val1, _M[1]);
-                _M[2] = std::min(val2, _M[2]);
-                _M[3] = std::min(val2, _M[3]);
-            }
-            _out.push_back(_m[0]);
-            _out.push_back(_m[1]);
-            _out.push_back(_m[2]);
-            _out.push_back(_m[3]);
-            _out.push_back(_M[0]);
-            _out.push_back(_M[1]);
-            _out.push_back(_M[2]);
-            _out.push_back(_M[3]);
-            return _out;
-        }
-        return {};
+        m_type = t;
+    }
+    void setComponent(eComponentType c)
+    {
+        m_componentType = c;
     }
 
+    /**
+     * @brief getMinMax
+     * @return
+     *
+     * Returns the min and max values for each component.
+     */
+    template<typename T>
+    std::pair< std::vector<T>, std::vector<T>> getMinMax() const
+    {
+        auto & V = *this;
 
+        static_assert( std::is_arithmetic_v<T>, "T must be an arithmetic type");
+        using value_type = T;
+
+        std::vector<value_type> _min(component_count(V.getType()), std::numeric_limits<value_type>::max() );
+        std::vector<value_type> _max(component_count(V.getType()), std::numeric_limits<value_type>::lowest() );
+
+        auto attrCount = attributeCount();
+        for(uint32_t j=0;j<attrCount;j++)
+        {
+            for(size_t i=0;i<_min.size();i++)
+            {
+                _min[i] = std::min( V.at<value_type>(j, i), _min[i] );
+                _max[i] = std::max( V.at<value_type>(j, i), _max[i] );
+            }
+        }
+        return {_min, _max};
+    }
+
+protected:
+    friend struct MeshPrimitive;
     std::vector<uint8_t> m_data;
     eComponentType       m_componentType = eComponentType::UNKNOWN;
     eType                m_type = eType::UNKNOWN;
 };
 
+//===========================================================================================================
+/**
+ * @brief calculateInterleavedStride
+ * @param attrs
+ * @return
+ *
+ * Calculates the sum of each attr[i].attributeSize() skipping any attributes that dont have
+ * items
+ */
+inline uint64_t calculateInterleavedStride(std::vector<VertexAttribute const*> const &attrs)
+{
+    uint64_t stride=0;
+    for(auto * v :  attrs)
+    {
+        if(v->size() > 0)
+            stride += v->getAttributeSize();
+    }
+    return stride;
+}
+
+/**
+ * @brief calculateInterleavedBytes
+ * @param attrs
+ * @return
+ *
+ * Returns the total number of bytes required to store all attributes in
+ * interleaved format, attributes with zero attributeCount() are not included
+ */
+inline uint64_t calculateInterleavedBytes(std::vector<VertexAttribute const*> const &attrs)
+{
+    auto stride = calculateInterleavedStride(attrs);
+
+    uint64_t vCount = 9999999999999;
+    for(auto * v :  attrs)
+    {
+        if(v->size() > 0)
+            vCount = std::min(vCount,v->attributeCount());
+    }
+    return stride*vCount;
+}
+
+
+//===========================================================================================================
 
 enum class Topology
 {
@@ -397,6 +751,34 @@ struct DrawCall
     Topology topology     = Topology::TRIANGLE_LIST;
 };
 
+using Primitive = DrawCall;
+
+/**
+ * @brief forEachVertexIndex
+ * @param _INDEX
+ * @param p
+ * @param C
+ *
+ * Given an index buffer and a primitive, call the callable, C for each VertexIndex in the primitive.
+ *
+ */
+template<typename Callable_t>
+inline void forEachVertexIndex(VertexAttribute const & _INDEX, Primitive const & p, Callable_t && C)
+{
+    if( _INDEX.getComponentType() == eComponentType::UNSIGNED_INT)
+    {
+        uint32_t vertexOffset = static_cast<uint32_t>(p.vertexOffset);
+        using IndexComponentType = uint32_t;
+
+        for(uint32_t i=0;i < p.indexCount ; i++)
+        {
+            uint32_t vertexIndex =  _INDEX.at<IndexComponentType>(i + static_cast<uint32_t>(p.indexOffset))
+                                   + vertexOffset;
+            C(vertexIndex);
+        }
+    }
+}
+
 /**
  * @brief The MeshPrimitive struct
  *
@@ -408,6 +790,8 @@ struct MeshPrimitive
 {
     using attribute_type = VertexAttribute;
 
+    // list of common attributes in the order specified by the GLTF specification
+    // initialized using the most common types
     attribute_type POSITION   = attribute_type(eComponentType::FLOAT, eType::VEC3);
     attribute_type NORMAL     = attribute_type(eComponentType::FLOAT, eType::VEC3);
     attribute_type TANGENT    = attribute_type(eComponentType::FLOAT, eType::VEC4);
@@ -417,11 +801,15 @@ struct MeshPrimitive
     attribute_type JOINTS_0   = attribute_type(eComponentType::UNSIGNED_SHORT, eType::VEC4);
     attribute_type WEIGHTS_0  = attribute_type(eComponentType::FLOAT, eType::VEC4);
 
+    // The index buffer
     attribute_type INDEX      = attribute_type(eComponentType::UNSIGNED_INT, eType::SCALAR);
 
-    Topology       topology = Topology::TRIANGLE_LIST;
+    Topology       topology   = Topology::TRIANGLE_LIST;
 
-    std::vector<DrawCall> subMeshes;
+    // a vector of primitives
+    // each primitive is a sub component of the mesh and
+    // contains the draw call to draw it
+    std::vector<Primitive> primitives;
 
     void clear()
     {
@@ -441,12 +829,63 @@ struct MeshPrimitive
 
 
     /**
+     * @brief dump
+     * @param out
+     *
+     * [experimental]
+     * Dump the entire mesh to a simple binary file
+     */
+    void dump(std::ostream & out)
+    {
+        auto attrs = {&POSITION  ,
+                                   &NORMAL    ,
+                                   &TANGENT   ,
+                                   &TEXCOORD_0,
+                                   &TEXCOORD_1,
+                                   &COLOR_0   ,
+                                   &JOINTS_0  ,
+                                   &WEIGHTS_0 ,
+                                   &INDEX};
+        struct header_t
+        {
+            uint64_t magic = 5496876546618;
+            uint32_t byteSize=0;
+            uint32_t numAttributes=0;
+        };
+
+        header_t h;
+        h.byteSize = 0;
+        for(auto * attr : attrs)
+        {
+            if(attr->size())
+            {
+                h.numAttributes++;
+            }
+        }
+
+        #define DUMP_ATTR(NAME ) if(NAME.size() > 0) NAME.dump(out, #NAME)
+
+        out.write(reinterpret_cast<char const *>(&h), sizeof(h));
+        DUMP_ATTR(NORMAL    );
+        DUMP_ATTR(TANGENT   );
+        DUMP_ATTR(TEXCOORD_0);
+        DUMP_ATTR(TEXCOORD_1);
+        DUMP_ATTR(COLOR_0   );
+        DUMP_ATTR(JOINTS_0  );
+        DUMP_ATTR(WEIGHTS_0 );
+        DUMP_ATTR(INDEX     );
+
+    }
+
+    /**
      * @brief calculateDeviceSize
      * @return
      *
      * Calculate the amount of bytes this mesh takes on the
      * the GPU if all vertices were placed one after the
-     * other
+     * other.
+     *
+     * This also includes the index size!
      */
     uint64_t calculateDeviceSize() const
     {
@@ -488,17 +927,72 @@ struct MeshPrimitive
             INDEX     .canMerge(P.INDEX      );
     }
 
+    /**
+     * @brief indexCount
+     * @return
+     *
+     * Returns the total number of indices in the mesh
+     */
     size_t indexCount() const
     {
         return INDEX.attributeCount();
     }
 
+    /**
+     * @brief vertexCount
+     * @return
+     *
+     * Returns number of vertices in the mesh. The number of vertices
+     * is the minimum (non-zero) attribute count of
+     */
     size_t vertexCount() const
     {
-        return POSITION.attributeCount();
+        size_t count=std::numeric_limits<size_t>::max();
+        for(auto * v :  { &POSITION,
+                           &NORMAL,
+                           &TANGENT,
+                           &TEXCOORD_0,
+                           &TEXCOORD_1,
+                           &COLOR_0,
+                           &JOINTS_0,
+                           &WEIGHTS_0})
+        {
+            auto sh = v->attributeCount();
+            if( sh != 0)
+                count = std::min<size_t>(count, sh);
+        }
+        return count;
     }
 
-    DrawCall getDrawCall() const
+    /**
+     * @brief getVertexFlags
+     * @return
+     *
+     * Return a the vertex flag mask where each bit
+     * represents whether the given attribute is available.
+     */
+    uint32_t getVertexFlags() const
+    {
+        uint32_t f = 0;
+        f |= POSITION   .size() == 0 ? 0 : (1u << 0);
+        f |= NORMAL     .size() == 0 ? 0 : (1u << 1);
+        f |= TANGENT    .size() == 0 ? 0 : (1u << 2);
+        f |= TEXCOORD_0 .size() == 0 ? 0 : (1u << 3);
+        f |= TEXCOORD_1 .size() == 0 ? 0 : (1u << 4);
+        f |= COLOR_0    .size() == 0 ? 0 : (1u << 5);
+        f |= JOINTS_0   .size() == 0 ? 0 : (1u << 6);
+        f |= WEIGHTS_0  .size() == 0 ? 0 : (1u << 7);
+        return f;
+    }
+
+    /**
+     * @brief getDrawCall
+     * @return
+     *
+     * Returns the drawcall for the entire mesh. This can be used
+     * if there are no primitives listed
+     */
+    Primitive getDrawCall() const
     {
         DrawCall dc;
         dc.indexOffset  = static_cast<int32_t>(0);
@@ -509,17 +1003,30 @@ struct MeshPrimitive
         return dc;
     }
 
-    DrawCall merge(MeshPrimitive const & P, bool renumberIndices = false)
+    /**
+     * @brief merge
+     * @param P
+     * @param renumberIndices
+     * @return
+     *
+     * Merges mesh P into the current mesh and returns the full primitive drawcall.
+     *
+     * The meshes can be merged only if they are similar (ie: they have the same attributes)
+     */
+    Primitive merge(MeshPrimitive const & P, bool renumberIndices = false)
     {
         DrawCall dc;
 
-        uint32_t currentVertexCount = static_cast<uint32_t>(this->getVertexCount());
+        uint32_t currentVertexCount = static_cast<uint32_t>(this->vertexCount());
         uint32_t currentIndexCount  = static_cast<uint32_t>(this->INDEX.size());
+
+        auto origIndexCount  = indexCount();
+        auto origVertexCount = vertexCount();
 
         dc.indexOffset  = static_cast<int32_t>(indexCount() );
         dc.vertexOffset = static_cast<int32_t>(vertexCount());
-        dc.vertexCount = static_cast<uint32_t>(P.vertexCount());
-        dc.indexCount  = static_cast<uint32_t>(P.indexCount() );
+        dc.vertexCount  = static_cast<uint32_t>(P.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(P.indexCount() );
 
         if( isSimilar(P) )
         {
@@ -544,9 +1051,16 @@ struct MeshPrimitive
                     assert( v == INDEX.get<uint32_t>(i) );
                 }
 
-                dc.vertexOffset = 0;
+                dc.vertexOffset = 0;    
             }
-            subMeshes.push_back(dc);
+
+            for(auto &  c : P.primitives)
+            {
+                auto & b = primitives.emplace_back(c);
+                b.indexOffset += static_cast<int32_t>(origIndexCount);
+                b.vertexOffset = renumberIndices ? 0 : static_cast<int>(origVertexCount);
+            }
+
             return dc;
         }
         throw std::runtime_error("MeshPrimitives are not similar");
@@ -575,70 +1089,131 @@ struct MeshPrimitive
                            &JOINTS_0,
                            &WEIGHTS_0})
         {
-            stride += v->getAttributeSize();
+            if(v->attributeCount() > 0)
+                stride += v->getAttributeSize();
         }
         return stride;
     }
+
+
+    /**
+     * @brief calculateBoundingSphereRadius
+     * @param p
+     * @return
+     *
+     * Calculate the bounding sphere of a specific primitive.
+     * The center of the sphere is positioned at the origin. If the primitive
+     * is fully in some quadrant, then the center of the sphere is still at the origin
+     */
+    template<typename PositionType=std::array<float,3>, typename IndexComponentType=uint32_t>
+    float calculateBoundingSphereRadius(Primitive const & p) const
+    {
+        float _Max=0.0f;
+        forEachVertexIndex(INDEX, p, [&_Max, this](IndexComponentType i)
+        {
+            auto r = POSITION.at< PositionType >(i);
+            auto R2 = r[0]*r[0] + r[1]*r[1] + r[2]*r[2];
+            _Max = std::max( _Max,  R2 );
+        });
+        return std::sqrt(_Max);
+    }
+
+    template<typename PositionType=std::array<float,3>, typename IndexComponentType=uint32_t>
+    float calculateBoundingSphereRadius() const
+    {
+        auto P = getDrawCall();
+        return calculateBoundingSphereRadius(P);
+    }
+
     /**
      * @brief copySequential
      * @param data
      * @return
      *
      * Copies all the vertex attributes sequentually into the provided buffer
-     * and returns the stride from one vertex to the next
+     * and returns the total number of vertices copied.
+     *
      *
      * [p0,n0,t0,p1,n1,t1...]
      *
      *
      */
-    inline uint64_t copyVertexAttributesInterleaved(void * data) const
+    inline uint64_t copyVertexAttributesInterleaved(void * data, uint64_t offset=0) const
     {
-        uint64_t stride = calculateInterleavedStride();
-        uint64_t offset = 0;
-
-        for(auto * v :  {  &POSITION,
+        return copyVertexAttributesInterleaved(static_cast<uint8_t*>(data)+offset,
+                         { &POSITION,
                            &NORMAL,
                            &TANGENT,
                            &TEXCOORD_0,
                            &TEXCOORD_1,
                            &COLOR_0,
                            &JOINTS_0,
-                           &WEIGHTS_0})
-        {
-            auto & V = *v;
-            V.strideCopy( static_cast<uint8_t*>(data)+offset, stride);
-            offset += V.getAttributeSize();
-        }
-        return stride;
+                           &WEIGHTS_0});
     }
-
 
     /**
-     * @brief getVertexCount
+     * @brief copyVertexAttributesInterleaved
+     * @param data
+     * @param attrs
      * @return
      *
-     * Returns the number of vertices in the mesh. The number of veertices
-     * is the munimum number of vertices in all the attributes
+     * Given a list of VertexAttribute pointers, copy them interleaved into data_write_ptr
+     * Eg:
+     *   copyVertexAttributeInterleaved(buffer, (&M.POSITION, &M.NORMAL, &M.TEXCOORD_0});
+     *
+     * will write the following information to buffer
+     *
+     * buffer  [p0,n0,t0,p1,n1,t1,p2,n2,t2...]
+     *
+     * Returns the total number of vertices written.
+     *
+     * Requires: * All attributes must have the same number of vertices
+     *           * data_write_ptr must have enough sequental data to write all attribute data
+     *
      */
-    uint64_t getVertexCount() const
+    template<typename T>
+    static uint64_t copyVertexAttributesInterleaved(T * data_write_ptr, std::vector<VertexAttribute const*> const &attrs)
     {
-        uint64_t vertexCount = std::numeric_limits<uint64_t>::max();
-        for(auto * v :  {  &POSITION,
-                           &NORMAL,
-                           &TANGENT,
-                           &TEXCOORD_0,
-                           &TEXCOORD_1,
-                           &COLOR_0,
-                           &JOINTS_0,
-                           &WEIGHTS_0})
+        auto stride = gul::calculateInterleavedStride(attrs);
+        uint64_t vCount = attrs.front()->attributeCount();
+
+        uint64_t offset = 0;
+        for(auto * v :  attrs)
         {
-            auto attrSize = v->getAttributeSize();
-            (void)attrSize;
-            if(v->attributeCount() != 0)
-                vertexCount = std::min<uint64_t>(vertexCount, v->attributeCount());
+            if(v->size() == 0)
+                continue;
+
+            v->strideCopyOffset(
+                            data_write_ptr,
+                            stride,
+                            offset,
+                            0,
+                            vCount
+                        );
+            offset += v->getAttributeSize();
         }
-        return vertexCount;
+        return vCount;
     }
+
+    template<typename T>
+    static uint64_t copyVertexAttributesInterleaved(std::vector<T> & dataVec, std::vector<VertexAttribute const*> const &attrs)
+    {
+        uint64_t vertexStride = 0;
+        uint64_t vertexCount  = attrs.front()->attributeCount();
+
+        for(auto * v :  attrs)
+        {
+            vertexStride += v->getAttributeSize();
+        }
+
+        auto totalBytes = vertexCount * vertexStride;
+
+        dataVec.resize( totalBytes / sizeof(T)  );
+        copyVertexAttributesInterleaved(dataVec.data(), attrs);
+
+        return vertexCount*vertexStride;
+    }
+
 
     /**
      * @brief copyVertexAttributesSquential
@@ -656,7 +1231,7 @@ struct MeshPrimitive
      */
     std::vector<uint64_t> copyVertexAttributesSquential(void * data) const
     {
-        auto vertexCount = getVertexCount();
+        //auto vertexCount = getVertexCount();
         std::vector<uint64_t> offsets;
         uint64_t offset=0;
         for(auto * v :  {  &POSITION,
@@ -672,10 +1247,10 @@ struct MeshPrimitive
             if(!v->empty())
             {
                 offsets.push_back(offset);
-                auto attrSize = v->getAttributeSize();
+                //auto attrSize = v->getAttributeSize();
 
                 auto count = v->attributeCount();
-                assert( count * attrSize <= v->m_data.size());
+                assert( count *  v->getAttributeSize() <= v->m_data.size());
                 std::memcpy( static_cast<uint8_t*>(data)+offset, v->m_data.data(), count * v->getAttributeSize());
                 offset += count * v->getAttributeSize();
             }
@@ -701,20 +1276,20 @@ struct MeshPrimitive
     }
 
     /**
-     * @brief getVertexSize
+     * @brief getVertexByteSize
      * @return
      *
-     * Returns the size of the vertrex in bytes if all the
+     * Returns the size in byte of the vertrex in bytes if all the
      * attributes were interleaved
      */
-    uint64_t getVertexSize() const
+    uint64_t getVertexByteSize() const
     {
         return calculateInterleavedStride();
     }
 
     inline uint64_t calculateInterleavedBufferSize() const
     {
-        return getVertexSize() * getVertexCount();
+        return getVertexByteSize() * vertexCount();
     }
 
     /**
@@ -740,9 +1315,9 @@ struct MeshPrimitive
         std::vector<_vec2> NEW_UV;
 
         uint32_t index = 0;
-        uint32_t j     = 0;
+        //uint32_t j     = 0;
 
-        auto vCount = getVertexCount();
+        auto vCount = vertexCount();
         for(uint32_t j=0;j<vCount;j++)
         {
             auto p = _POS.at<_vec3>(j);
@@ -778,11 +1353,12 @@ struct MeshPrimitive
     /**
      * @brief rebuildNormals
      *
-     * Recalculate the normals for each vertex
+     * Recalculate the normals for each vertex. Normals are calculated as the average
+     * of the face normals attached to the vertex
      */
     void rebuildNormals()
     {
-        using _vec2 = std::array<float,2>;
+        //using _vec2 = std::array<float,2>;
         using _vec3 = std::array<float,3>;
 
         {
@@ -790,7 +1366,6 @@ struct MeshPrimitive
             auto & P = POSITION;
             std::vector< _vec3 > normals(P.attributeCount(), _vec3({0,0,0}));
 
-            auto vC = P.attributeCount();
             auto iC = I.attributeCount();
 
             for(size_t j=0; j< iC; j+=3)
@@ -799,20 +1374,20 @@ struct MeshPrimitive
                 auto i1 = I.at<uint32_t>(j+1);
                 auto i2 = I.at<uint32_t>(j+2);
 
-                assert(i0 < vC);
-                assert(i1 < vC);
-                assert(i2 < vC);
+                assert(i0 < getVertexCount());
+                assert(i1 < getVertexCount());
+                assert(i2 < getVertexCount());
 
                 auto p0 = P.at<_vec3>(i0);
                 auto p1 = P.at<_vec3>(i1);
                 auto p2 = P.at<_vec3>(i2);
 
                 decltype(p0) v1, v2;
-                v1[0] = p1[0] - p0[1];
+                v1[0] = p1[0] - p0[0];
                 v1[1] = p1[1] - p0[1];
                 v1[2] = p1[2] - p0[2];
 
-                v2[0] = p2[0] - p0[1];
+                v2[0] = p2[0] - p0[0];
                 v2[1] = p2[1] - p0[1];
                 v2[2] = p2[2] - p0[2];
 
@@ -894,7 +1469,15 @@ inline void translateMesh(MeshPrimitive & M, float x, float y, float z)
     }
 }
 
-
+/**
+ * @brief Box
+ * @param dx
+ * @param dy
+ * @param dz
+ * @return
+ *
+ * Create a box mesh with side lengths (dx,dy,dz)
+ */
 inline MeshPrimitive Box(float dx , float dy , float dz )
 {
     using _vec2 = std::array<float,2>;
@@ -951,9 +1534,18 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
 
 
     //=========================
-    I.init(eComponentType::UNSIGNED_SHORT, eType::SCALAR);
-    for( uint16_t j=0;j<36;j++)
+    I.init(eComponentType::UNSIGNED_INT, eType::SCALAR);
+    for( uint32_t j=0;j<36;j++)
         I.push_back( j );
+
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
 
     return M;
 }
@@ -963,6 +1555,20 @@ inline MeshPrimitive Box(float dx )
     return Box(dx,dx,dx);
 }
 
+/**
+ * @brief Grid
+ * @param length - length of the grid
+ * @param width - width of the grid
+ * @param dl - grid line spacing in the length dimension
+ * @param dw - grid line spacing in the width dimension
+ * @param majorL -
+ * @param majorW
+ * @param lscale
+ * @param wscale
+ * @return
+ *
+ * Return a grid mesh. Attributes: POSITION, COLOR
+ */
 inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=5, int majorW=5, float lscale=1.0f, float wscale=1.0f)
 {
     using _vec3  = std::array<float,3>;
@@ -1029,10 +1635,27 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
         }
     }
 
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
     return M;
 }
 
 
+/**
+ * @brief Sphere
+ * @param radius
+ * @param rings
+ * @param sectors
+ * @return
+ *
+ * Return a sphere mesh
+ */
 inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=20)
 {
     using _vec2 = std::array<float,2>;
@@ -1067,23 +1690,40 @@ inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=2
         }
     }
 
-    I.init(eComponentType::UNSIGNED_SHORT, eType::SCALAR);
+    I.init(eComponentType::UNSIGNED_INT, eType::SCALAR);
     for(r = 0 ; r < rings   - 1 ; r++)
     {
         for(s = 0 ; s < sectors - 1 ; s++)
         {
-            I.push_back(  static_cast<uint16_t>( (r+1) * sectors + s) ); //0
-            I.push_back(  static_cast<uint16_t>( (r+1) * sectors + (s+1) ) ); //1
-            I.push_back(  static_cast<uint16_t>(  r * sectors + (s+1) )); //2
-            I.push_back(  static_cast<uint16_t>( (r+1) * sectors + s )); //0
-            I.push_back(  static_cast<uint16_t>(  r * sectors + (s+1) )); //2
-            I.push_back(  static_cast<uint16_t>(   r * sectors + s )); //3
+            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + s) ); //0
+            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + (s+1) ) ); //1
+            I.push_back(  static_cast<uint32_t>(  r * sectors + (s+1) )); //2
+            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + s )); //0
+            I.push_back(  static_cast<uint32_t>(  r * sectors + (s+1) )); //2
+            I.push_back(  static_cast<uint32_t>(   r * sectors + s )); //3
         }
     }
 
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
     return M;
 }
 
+/**
+ * @brief Cylinder
+ * @param R
+ * @param H
+ * @param rSegments
+ * @return
+ *
+ * Return a cylinder mesh
+ */
 inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
 {
     using _vec2 = std::array<float,2>;
@@ -1210,6 +1850,15 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
 
     }
 
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
+
     return M;
 }
 
@@ -1217,7 +1866,7 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
  * @brief Imposter
  * @return
  *
- * An imposter is a simple quad in the XY plane
+ * An imposter is a simple quad in the XY plane with normal in the +Z direction
  */
 inline MeshPrimitive Imposter(float sideLength=1.0f)
 {
@@ -1248,6 +1897,14 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
 
     I = std::vector<uint32_t>{0,1,2,0,2,3};
 
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
     return M;
 }
 
@@ -1262,7 +1919,6 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
  */
 inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t segments=10)
 {
-
     using _vec2 = std::array<float,2>;
     using _vec3 = std::array<float,3>;
 
@@ -1310,13 +1966,12 @@ inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t se
             auto c = ( (k+1) * numPoints + i  ) % totalPoints;
             auto d = ( (k+1) * numPoints + i+1) % totalPoints;
 
-            indices.push_back(b);
-            indices.push_back(a);
-            indices.push_back(c);
-
-            indices.push_back(c);
-            indices.push_back(d);
-            indices.push_back(b);
+            indices.push_back(uint32_t(b));
+            indices.push_back(uint32_t(a));
+            indices.push_back(uint32_t(c));
+            indices.push_back(uint32_t(c));
+            indices.push_back(uint32_t(d));
+            indices.push_back(uint32_t(b));
         }
     }
 
@@ -1326,6 +1981,15 @@ inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t se
     M.TEXCOORD_0 = uv;
 
     M.rebuildNormals();
+
+    {
+        auto & dc = M.primitives.emplace_back();
+        dc.indexOffset  = static_cast<int32_t>(0);
+        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
+        dc.indexCount   = static_cast<uint32_t>(M.indexCount());
+        dc.topology     = gul::Topology::TRIANGLE_LIST;
+    }
 
     return M;
 }
