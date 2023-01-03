@@ -1,10 +1,10 @@
 /*
- * A Transform class represents a spatial position and an
+ * A Transform_t class represents a spatial position and an
  * orientation.
  *
  */
-#ifndef GUL_MATH_TRANSFORM_H
-#define GUL_MATH_TRANSFORM_H
+#ifndef GUL_MATH_Transform_t_H
+#define GUL_MATH_Transform_t_H
 
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -13,46 +13,69 @@
 namespace gul
 {
 
-struct Transform;
-
 /**
- * @brief operator *
- * @param ps
- * @param ls
- * @return
+ * @brief The Transform_t struct
  *
- * Operator overload for * so that it acts similar to a matrix vector
- * product.
- *
- */
-glm::vec3 operator * (const Transform & ps, const glm::vec3 & ls);
-
-/**
- * @brief The Transform struct
- *
- * The Transform class is similar to a Matrix transform, but allows
+ * The Transform_t class is similar to a Matrix Transform_t, but allows
  * you to provide the position,rotation and scaling factors instead
  * of setting up a full matrix.
  *
  */
-struct Transform
+template<typename _T=float>
+struct Transform_t
 {
-    glm::vec3    position;
-    glm::quat    rotation;
-    glm::vec3    scale;
+    using value_type = _T;
+    using vec_type  = glm::vec<3, value_type, glm::defaultp>;
+    using quat_type = glm::qua<value_type, glm::defaultp>;
+    using mat4_type = glm::mat<4, 4, value_type, glm::defaultp>;
 
-    constexpr Transform(glm::vec3 const & _position={0.f,0.f,0.f},
-                        glm::quat const & _rotation = {1.f,0.f,0.f,0.f},
-                        glm::vec3 const & _scale = {1.f,1.f,1.f}) : position(_position),
-                                                                    rotation(_rotation),
-                                                                    scale(_scale)
+    vec_type  position;
+    quat_type rotation;
+    vec_type  scale;
+
+
+    explicit constexpr Transform_t() : position({0,0,0}),
+                                                                 rotation({1.f,0.f,0.f,0.f}),
+                                                                 scale({1,1,1})
     {
     }
 
-    Transform(glm::mat4 const & M)
+
+    template<typename _t1>
+    explicit constexpr Transform_t(glm::vec<3, _t1, glm::defaultp> const & _position) : position(_position),
+                                                                 rotation({1.f,0.f,0.f,0.f}),
+                                                                 scale({1,1,1})
     {
-        glm::vec3 skew;
-        glm::vec4 perspective;
+    }
+
+    template<typename _t1>
+    explicit constexpr Transform_t(glm::qua<_t1, glm::defaultp> const & _rotation) : position({0,0,0}),
+                                                                 rotation(_rotation),
+                                                                 scale({1,1,1})
+    {
+    }
+
+    template<typename _t1>
+    explicit constexpr Transform_t(glm::vec<3, _t1, glm::defaultp> const & _position,
+                                   glm::qua<_t1, glm::defaultp> const & _rotation,
+                                   glm::vec<3, _t1, glm::defaultp> const & _scale) : position(_position),
+                                                                 rotation(_rotation),
+                                                                 scale(_scale)
+    {
+    }
+
+    template<typename _P>
+    constexpr Transform_t(Transform_t<_P> const & P) : position(P.position),
+                                                       rotation(P.rotation),
+                                                       scale(P.scale)
+    {
+    }
+
+
+    Transform_t(mat4_type const & M)
+    {
+        vec_type skew;
+        typename mat4_type::col_type perspective;
         glm::decompose(M, scale, rotation, position, skew,perspective);
     }
 
@@ -60,11 +83,11 @@ struct Transform
      * @brief identity
      * @return
      *
-     * Returns the identity transform
+     * Returns the identity Transform_t
      */
-    static constexpr Transform identity()
+    static constexpr Transform_t identity()
     {
-        return Transform();
+        return Transform_t();
     }
 
     /**
@@ -72,9 +95,9 @@ struct Transform
      * @param T
      * @return
      *
-     * Translate the transform by some vector
+     * Translate the Transform_t by some vector
      */
-    Transform& translate(glm::vec3 const & T)
+    Transform_t& translate(vec_type const & T)
     {
         position += T;
         return *this;
@@ -85,10 +108,10 @@ struct Transform
      * @param direction
      * @return
      *
-     * Translates the transform based on the rotation of the
-     * current transform.
+     * Translates the Transform_t based on the rotation of the
+     * current Transform_t.
      */
-    Transform& translateLocal(const glm::vec3 & direction)
+    Transform_t& translateLocal(const vec_type & direction)
     {
         return translate( rotation * direction);
     }
@@ -99,9 +122,9 @@ struct Transform
      * @param AngleRadians
      * @return
      *
-     * Rotate the Transform around a global axis by some angle
+     * Rotate the Transform_t around a global axis by some angle
      */
-    Transform& rotateGlobal(const glm::vec3 & axis, float AngleRadians)
+    Transform_t& rotateGlobal(const vec_type & axis, value_type AngleRadians)
     {
         return rotateLocal(glm::conjugate(rotation) * axis, AngleRadians);
         return *this;
@@ -113,10 +136,10 @@ struct Transform
      * @param AngleRadians
      * @return
      *
-     * Rotate the the Transform around a vector relative to
-     * the local rotation of the Transform.
+     * Rotate the the Transform_t around a vector relative to
+     * the local rotation of the Transform_t.
      */
-    Transform& rotateLocal(const glm::vec3 & axis, float AngleRadians)
+    Transform_t& rotateLocal(const vec_type & axis, value_type AngleRadians)
     {
         rotation = glm::rotate( rotation, AngleRadians, axis );
         return *this;
@@ -129,9 +152,9 @@ struct Transform
      *
      * Set the rotation using the euler angles
      */
-    Transform& setEuler( const glm::vec3 & PitchYawRoll )
+    Transform_t& setEuler( const vec_type & PitchYawRoll )
     {
-        rotation = glm::quat(PitchYawRoll);
+        rotation = quat_type(PitchYawRoll);
         return *this;
     }
 
@@ -139,46 +162,48 @@ struct Transform
      * @brief getMatrix
      * @return
      *
-     * Returns the Transform as a Matrix
+     * Returns the Transform_t as a Matrix
      */
-    glm::mat4 getMatrix() const
+    mat4_type getMatrix() const
     {
-#if defined USE_ANGLE_AXIS
-        const float angle    = glm::angle(rotation);
-        const glm::vec3 axis = glm::axis(rotation);
-
-        return glm::scale( glm::rotate( glm::translate(  glm::mat4(1.0f), position), angle, axis), scale);
-#else
-        //return glm::translate(position) * glm::mat4_cast(rotation) * glm::scale( glm::mat4(1.0), scale);
-        return glm::translate(  glm::mat4(1.0f), position) * glm::mat4_cast(rotation) * glm::scale( glm::mat4(1.0), scale);
-#endif
+    #if 1
+        auto M = mat4_cast(rotation);
+        M[0] *= scale[0];
+        M[1] *= scale[1];
+        M[2] *= scale[2];
+        M[3] = typename mat4_type::col_type(position,1.0f);
+        return M;
+    #else
+        //return glm::translate(position) * mat4_type_cast(rotation) * glm::scale( mat4_type(1.0), scale);
+        return glm::translate(  mat4_type(1.0f), position) * mat4_type_cast(rotation) * glm::scale( mat4_type(1.0), scale);
+    #endif     
     }
 
     /**
      * @brief getViewMatrix
      * @return
      *
-     * Returns the Transform as a view matrix. This is
+     * Returns the Transform_t as a view matrix. This is
      * used mostly for Computer Graphics, it is different
      * than getMatrix()
      *
      * The returned matrix is the camera matrix as if the
-     * camera was looking down the +z axis of the Transform.
+     * camera was looking down the +z axis of the Transform_t.
      */
-    glm::mat4 getViewMatrix() const
+    mat4_type getViewMatrix() const
     {
-        return glm::lookAt( position, position + rotation * glm::vec3(0,0,1), rotation * glm::vec3(0,1,0) );
+        return glm::lookAt( position, position + rotation * vec_type(0,0,1), rotation * vec_type(0,1,0) );
     }
 
     /**
      * @brief reverse
      * @return
      *
-     * Returns the reverse quaternion of the Transform's rotation
+     * Returns the reverse quaternion of the Transform_t's rotation
      */
-    glm::quat reverse() const
+    quat_type reverse() const
     {
-        return glm::quat(rotation.w, -rotation.x,  -rotation.y, -rotation.z);
+        return quat_type(rotation.w, -rotation.x,  -rotation.y, -rotation.z);
     }
 
     /**
@@ -187,142 +212,107 @@ struct Transform
      * @param up
      * @return
      *
-     * Rotate the transform so it looks at a particular point.
+     * Rotate the Transform_t so it looks at a particular point.
      */
-    Transform& lookat( glm::vec3 const & pointToLookAt, glm::vec3 const & up)
+    Transform_t& lookat( vec_type const & pointToLookAt, vec_type const & up)
     {
 #if 1
         rotation = glm::quatLookAt( glm::normalize(position-pointToLookAt) , up);
 #else
-        glm::vec3 z = -glm::normalize(position-pointToLookAt);
-        glm::vec3 x = glm::normalize(glm::cross(up,z));
-        glm::vec3 y = glm::cross(z,x);
+        vec_type z = -glm::normalize(position-pointToLookAt);
+        vec_type x = glm::normalize(glm::cross(up,z));
+        vec_type y = glm::cross(z,x);
 
         glm::mat3 R(x,y,z);
-        rotation = glm::quat_cast(R);
+        rotation = quat_type_cast(R);
 #endif
         return *this;
-
-        // ignore this: this is another method of calculating the rotation
-        // not not working 100% the way I want.
-        // rotation = glm::conjugate( glm::quat_cast( glm::lookAt( position, -at, up)  ) );
     }
 
 
-    // return the x/y/z axies of the Transform.
+    // return the x/y/z axies of the Transform_t.
     // ie: the direction the local direction of the x-axis
-    glm::vec3 xAxis() const
+    vec_type xAxis() const
     {
-        return rotation * glm::vec3(1,0,0);
+        return rotation * vec_type(1,0,0);
     }
-    glm::vec3 yAxis() const
+    vec_type yAxis() const
     {
-        return rotation * glm::vec3(0,1,0);
+        return rotation * vec_type(0,1,0);
     }
-    glm::vec3 zAxis() const
+    vec_type zAxis() const
     {
-        return rotation * glm::vec3(0,0,1);
+        return rotation * vec_type(0,0,1);
     }
 
     // returns various directions
-    glm::vec3 forward() const
+    vec_type forward() const
     {
-        return rotation * glm::vec3(0,0,1);
+        return zAxis();
     }
-    glm::vec3 back() const
+    vec_type back() const
     {
         return -forward();
     }
 
-    glm::vec3 left() const
+    vec_type left() const
     {
-        return rotation * glm::vec3(1,0,0);
+        return xAxis();
     }
-    glm::vec3 right() const
+    vec_type right() const
     {
         return -left();
     }
 
-    glm::vec3 up() const
+    vec_type up() const
     {
-        return rotation * glm::vec3(0,1,0);
+        return yAxis();
     }
-    glm::vec3 down() const
+    vec_type down() const
     {
         return -up();
     }
 
-    // A few constant transforms which provide
+    // A few constant Transform_ts which provide
     // rotations around paricular axes
-    static constexpr Transform R90x()
+    static constexpr Transform_t<value_type> R90x()
     {
-        return Transform( {0,0,0}, glm::quat( { glm::half_pi<float>() ,0,0} ));
+        return Transform_t<value_type>( quat_type( { glm::half_pi<value_type>() ,0,0} ));
     }
-    static constexpr Transform R180x()
+    static constexpr Transform_t<value_type> R180x()
     {
-        return Transform( {0,0,0}, glm::quat( { glm::pi<float>() ,0,0} ));
+        return Transform_t<value_type>(  quat_type( { glm::pi<value_type>() ,0,0} ));
     }
-    static constexpr Transform R270x()
+    static constexpr Transform_t<value_type> R270x()
     {
-        return Transform( {0,0,0}, glm::quat( { -glm::half_pi<float>() ,0,0} ));
+        return Transform_t<value_type>(  quat_type( { -glm::half_pi<value_type>() ,0,0} ));
     }
-    static constexpr Transform R90y()
+    static constexpr Transform_t<value_type> R90y()
     {
-        return  Transform( {0,0,0}, glm::quat( { 0,glm::half_pi<float>() ,0} ));
+        return  Transform_t<value_type>(  quat_type( { 0,glm::half_pi<value_type>() ,0} ));
     }
-    static constexpr Transform R180y()
+    static constexpr Transform_t<value_type> R180y()
     {
-        return Transform( {0,0,0}, glm::quat( { 0,glm::pi<float>() ,0} ));
+        return Transform_t<value_type>(  quat_type( { 0,glm::pi<value_type>() ,0} ));
     }
-    static constexpr Transform R270y()
+    static constexpr Transform_t<value_type> R270y()
     {
-        return Transform( {0,0,0}, glm::quat( { 0,-glm::half_pi<float>() ,0} ));
+        return Transform_t<value_type>(  quat_type( { 0,-glm::half_pi<value_type>() ,0} ));
     }
-    static constexpr Transform R90z()
+    static constexpr Transform_t<value_type> R90z()
     {
-        return  Transform( {0,0,0}, glm::quat( { 0,0,glm::half_pi<float>() } ));
+        return  Transform_t<value_type>(  quat_type( { 0,0,glm::half_pi<value_type>() } ));
     }
-    static constexpr Transform R180z()
+    static constexpr Transform_t<value_type> R180z()
     {
-        return Transform( {0,0,0}, glm::quat( { 0,0,glm::pi<float>() } ));
+        return Transform_t<value_type>(  quat_type( { 0,0,glm::pi<value_type>() } ));
     }
-    static constexpr Transform R270z()
+    static constexpr Transform_t<value_type> R270z()
     {
-        return Transform( {0,0,0}, glm::quat( { 0,0,-glm::half_pi<float>() } ));
+        return Transform_t( quat_type( { 0,0,-glm::half_pi<value_type>() } ));
     }
 };
 
-/**
- * @brief inverse
- * @param L
- * @return
- *
- * If the matrix form of T = P * R * S
- * then the inverse is :
- *    T' = (P * R * S)'
- *    T' =  S' * R' * P'
- *
- * Which is a transform where the positions/scales
- * are switched and inverted.
- * Although this works with matrices, this is
- * incorrect for Transforms.
- *
- * if x1 = T * x;
- *
- * x is first scaled by s, then rotated by r, then translated by t.
- *
- * The reverse of this is:
- *
- * x1 is first scaled by 1/s, then rotated -r, then translated -t.
- */
-inline Transform inverse( const Transform & L)
-{
-    return Transform{
-        -L.position,
-        glm::conjugate(L.rotation),
-        1.0f / L.scale
-    };
-}
 
 /**
  * @brief mix
@@ -332,34 +322,50 @@ inline Transform inverse( const Transform & L)
  * @return
  *
  * performs the equivelant of glm::mix(  ), smoothly interpolates
- * the transform from L to R
+ * the Transform_t from L to R
  */
-inline Transform mix( const Transform & L, const Transform & R, float t)
+template<typename T>
+inline Transform_t<T> mix( const Transform_t<T> & L, const Transform_t<T> & R, typename Transform_t<T>::value_type t)
 {
-    return Transform{
+    return Transform_t<T>{
         glm::mix(L.position, R.position, t),
         glm::slerp(L.rotation, R.rotation, t),
         glm::mix(L.scale, R.scale,t)
     };
 }
 
-inline glm::vec3 operator * (const Transform & ps, const glm::vec3 & ls)
+
+/**
+ * @brief operator *
+ * @param ps
+ * @param ls
+ * @return
+ *
+ * Transform a vector
+ *
+ * If you need to perform the same transformation on multiple vectors, it would be faster to
+ * first get the matrix representation using getMatrix() then multiply the matrix by the vector.
+ *
+ */
+template<typename T>
+inline typename Transform_t<T>::vec_type operator * (const Transform_t<T> & ps, const typename  Transform_t<T>::vec_type &ls)
 {
-    return ps.position  + ps.rotation * (ps.scale * ls);
+    return ps.position + glm::rotate(ps.rotation, ps.scale*ls);
 }
 
-
-inline Transform operator * (const Transform & ps, const Transform & ls)
+template<typename T>
+inline Transform_t<T> operator * (const Transform_t<T> & ps, const Transform_t<T> & ls)
 {
     return
-    Transform(
+    Transform_t<T>(
                 ps.position  + ps.rotation * (ps.scale * ls.position),
                 ps.rotation * ls.rotation,
                 ps.scale * ls.scale
     );
 }
 
-inline Transform& operator *= ( Transform & ps,  Transform const & ls)
+template<typename T>
+inline Transform_t<T>& operator *= ( Transform_t<T> & ps,  Transform_t<T> const & ls)
 {
     ps = ps * ls;
 
@@ -367,18 +373,12 @@ inline Transform& operator *= ( Transform & ps,  Transform const & ls)
 
 }
 
-inline Transform operator/( Transform const & ws,  Transform const& ps)
-{
-    const glm::quat psConjugate = glm::conjugate(ps.rotation);
+using Transform = Transform_t<float>;
 
-    return Transform  (
-                         (psConjugate * (ws.position - ps.position)) / ps.scale,
-                         psConjugate * ws.rotation,
-                         psConjugate * (ws.scale / ps.scale)
-                );
-}
+using fTransform = Transform_t<float>;
+using dTransform = Transform_t<double>;
 
 }
 
-#endif // Transform_H
+#endif // Transform_t_H
 

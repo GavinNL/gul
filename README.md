@@ -1,6 +1,8 @@
 # Gavin's Utility Library
 
-[![pipeline status](https://gitlab.com/GavinNL/gul/badges/main/pipeline.svg)](https://gitlab.com/GavinNL/gul/-/commits/main) [![coverage report](https://gitlab.com/GavinNL/gul/badges/main/coverage.svg)](https://gitlab.com/GavinNL/gul/-/commits/main) [![Build status](https://ci.appveyor.com/api/projects/status/euex06777is1gixa/branch/main?svg=true)](https://ci.appveyor.com/project/GavinNL/gul/branch/main)
+[![pipeline status](https://gitlab.com/GavinNL/gul/badges/main/pipeline.svg)](https://gitlab.com/GavinNL/gul/-/commits/main)
+[![coverage report](https://gitlab.com/GavinNL/gul/badges/main/coverage.svg)](https://gitlab.com/GavinNL/gul/-/commits/main)
+[![Build status](https://ci.appveyor.com/api/projects/status/f1ls63qm7d6v836x?svg=true)](https://ci.appveyor.com/project/GavinNL/gul-l0hxo)
 
 This is a collection of single-header classes which I have developed over the years for various uses. 
 

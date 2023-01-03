@@ -4,6 +4,9 @@ glm/0.9.9.8
 stb/20200203
 nlohmann_json/3.11.2
 
+[options]
+catch2:with_benchmark=True
+
 [generators]
 cmake
 cmake_paths
