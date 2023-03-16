@@ -30,7 +30,7 @@ install:
     - set PATH=C:\Users\appveyor\AppData\Roaming\Python\Python36\Scripts;%PYTHON%;%PYTHON%/Scripts/;%PATH%
     - where python
     - python -m pip install --upgrade pip
-    - python -m pip install conan --user
+    - python -m pip install conan==1.59 --user
     - dir "%PYTHON%/Scripts"
     - conan user
     - conan --version
@@ -53,7 +53,7 @@ build_script:
 test_script:
 - cmd: >-
     set CTEST_OUTPUT_ON_FAILURE=1
-    ctest --output-on-failure -C Release
+    ctest --verbose --output-on-failure -C Release
 
 
 
