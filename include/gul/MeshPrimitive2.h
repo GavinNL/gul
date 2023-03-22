@@ -1374,9 +1374,9 @@ struct MeshPrimitive
                 auto i1 = I.at<uint32_t>(j+1);
                 auto i2 = I.at<uint32_t>(j+2);
 
-                assert(i0 < getVertexCount());
-                assert(i1 < getVertexCount());
-                assert(i2 < getVertexCount());
+                assert(i0 < vertexCount());
+                assert(i1 < vertexCount());
+                assert(i2 < vertexCount());
 
                 auto p0 = P.at<_vec3>(i0);
                 auto p1 = P.at<_vec3>(i1);
