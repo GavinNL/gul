@@ -83,6 +83,13 @@ struct SingleResourceManagerData
     std::mutex m_mutex;
 };
 
+enum class eResourceState : uint8_t
+{
+    NOT_LOADED,
+    LOADING,
+    LOADED
+};
+
 template<typename T>
 struct Resource_t
 {
@@ -108,22 +115,27 @@ struct Resource_t
      */
     bool isLoaded() const
     {
-        return value.has_value();
+        return getState() == eResourceState::LOADED && value.has_value();
     }
 
     /**
      * @brief emplace_resource
      * @param v
      *
-     * Ssets the resource data
+     * Sets the resource data
      */
     void emplace_resource(T && v)
     {
         auto L = getLockGuard();
         value = std::move(v);
         updateLoadTime();
-        setIsLoading(false);
+        setState(eResourceState::LOADED);
         m_dirty = false;
+        auto it = std::remove_if(m_data->m_onLoadCallbacks.begin(), m_data->m_onLoadCallbacks.end(),[self = m_self.lock()](auto &V)
+                                 {
+                                     return V(self);
+                                 });
+        m_data->m_onLoadCallbacks.erase(it, m_data->m_onLoadCallbacks.end());
     }
 
     /**
@@ -152,6 +164,14 @@ struct Resource_t
     {
         return m_accessTime;
     }
+    auto getLoadTime() const
+    {
+        return m_loadTime;
+    }
+    auto getLoadTime_time_t() const
+    {
+        return to_time_t(getLoadTime());
+    }
 
     /**
      * @brief load
@@ -174,6 +194,15 @@ struct Resource_t
         return false;
     }
 
+    void setState(eResourceState s)
+    {
+        m_state = s;
+    }
+    eResourceState getState() const
+    {
+        return m_state;
+    }
+
     /**
      * @brief isLoading
      * @return
@@ -183,12 +212,7 @@ struct Resource_t
      */
     bool isLoading() const
     {
-        return m_isBackgroundLoading;
-    }
-
-    void setIsLoading(bool t)
-    {
-        m_isBackgroundLoading.store(t);
+        return getState() == eResourceState::LOADING;
     }
 
     /**
@@ -222,19 +246,12 @@ struct Resource_t
         return
         [this]()
         {
-            this->setIsLoading(true);
+            this->setState(eResourceState::LOADING);
 
             auto v = (m_data->m_loader)(uri);
             emplace_resource( std::move(v) );
 
-            this->setIsLoading(false);
-
-
-            auto it = std::remove_if(m_data->m_onLoadCallbacks.begin(), m_data->m_onLoadCallbacks.end(),[self = m_self.lock()](auto &V)
-            {
-                return V(self);
-            });
-            m_data->m_onLoadCallbacks.erase(it, m_data->m_onLoadCallbacks.end());
+            this->setState(eResourceState::LOADED);
         };
     }
 
@@ -254,15 +271,7 @@ struct Resource_t
         return std::lock_guard<std::mutex>(m_data->m_mutex);
     }
 
-    auto getLoadTime() const
-    {
-        return m_loadTime;
-    }
 
-    auto getLoadTime_time_t() const
-    {
-        return to_time_t(getLoadTime());
-    }
 
 
     /**
@@ -285,15 +294,19 @@ struct Resource_t
      */
     T & get()
     {
-        if(m_isBackgroundLoading)
+        if(isLoaded())
         {
-            throw std::runtime_error("Resource is currently loading in the background.");
+            return *value;
         }
-        if(!value.has_value())
+        if(isLoading())
         {
-            value = (m_data->m_loader)(uri);
+            throw std::runtime_error("Resource is currently loading in the background: " + getUri().toString());
         }
-        return *value;
+        {
+            auto b = getBackgroundLoader();
+            b();
+            return get();
+        }
     }
 
     std::any const & getUserData() const
@@ -309,6 +322,17 @@ struct Resource_t
     // User Variables: Variables which can be attached to the resource
     // for user-specific things
     //================================================================
+
+    // Get a reference to the map of variables
+    std::unordered_map<std::string, std::any> & getUserVars()
+    {
+        return m_userVars;
+    }
+    std::unordered_map<std::string, std::any> const & getUserVars() const
+    {
+        return m_userVars;
+    }
+
     template<typename V>
     V& setUserVar(std::string const & x, V const & val)
     {
@@ -316,6 +340,7 @@ struct Resource_t
         vv = val;
         return std::any_cast<V&>(x);
     }
+
     template<typename V>
     V& setUserVar(std::string const & x, V && val)
     {
@@ -324,12 +349,11 @@ struct Resource_t
         return std::any_cast<V&>(x);
     }
 
-    template<typename V>
     std::any const & getUserVar(std::string const & x) const
     {
         return m_userVars.at(x);
     }
-    template<typename V>
+
     std::any & getUserVar(std::string const & x)
     {
         return m_userVars[x];
@@ -345,20 +369,11 @@ struct Resource_t
     {
         return std::any_cast<V&>(getUserVar(x));
     }
+
     void eraseUserVar(std::string const & x)
     {
         m_userVars.erase(x);
     }
-    std::unordered_map<std::string, std::any> const & getUserVars()
-    {
-        return m_userVars;
-    }
-
-    std::unordered_map<std::string, std::any> const & getUserVars() const
-    {
-        return m_userVars;
-    }
-
 
 protected:
     wResourceID<resource_type> m_self;
@@ -367,12 +382,13 @@ protected:
     gul::uri                                             uri;
     std::chrono::system_clock::time_point                m_loadTime;
     std::chrono::system_clock::time_point                m_accessTime = std::chrono::system_clock::now(); // the last time this resource was accessed
-    //std::vector< std::function<bool(void)> >             m_onLoadCallbacks;
     std::unordered_map<std::string, std::any>            m_userVars;
+
+    std::atomic<eResourceState> m_state = {};
 
     bool m_unloadLater         = false;
     bool m_dirty               = true;
-    std::atomic<bool> m_isBackgroundLoading = false;
+    //std::atomic<bool> m_isBackgroundLoading = false;
 
     std::any m_userData;
     friend struct SingleResourceManager<T>;
@@ -452,10 +468,33 @@ struct SingleResourceManager
         m_data->m_loader = std::move(C);
     }
 
+    /**
+     * @brief insertOnLoadCallback
+     * @param v
+     *
+     * Sets function which will be called when the resource is emplaced.
+     * when id->emplace_resource( ) is called
+     *
+     * The callback function should return TRUE if the callback function
+     * should be removed after it is called.
+     */
     void insertOnLoadCallback(std::function<bool( resource_handle )> && v)
     {
         m_data->m_onLoadCallbacks.push_back(v);
     }
+
+    /**
+     * @brief insertOnUnloadCallback
+     * @param v
+     *
+     * Sets a function to be called when a resource is to be unloaded.
+     * The callback function will be called BEFORE the resource data is removed.
+     * id->get() will still be able to be called.
+     *
+     * The callback function should return TURE if the callback function should
+     * be removed after it is called.
+     *
+     */
     void insertOnUnloadCallback(std::function<bool( resource_handle )> && v)
     {
         m_data->m_onUnloadCallbacks.push_back(v);
