@@ -129,6 +129,14 @@ constexpr uint32_t component_size(eComponentType c)
     }
 }
 
+/**
+ * @brief type_to_component
+ * @return
+ *
+ * Given a datatype, either fundamental, array<T>, or glm type
+ * return the base component type. If it is non-fundamental type
+ * T::value_type must exist
+ */
 template<typename T>
 constexpr eComponentType type_to_component()
 {
@@ -153,10 +161,16 @@ constexpr eComponentType type_to_component()
     }
 }
 
+/**
+ * @brief type_to_type
+ * @return
+ *
+ * Converts a C++ datatype into a eType
+ */
 template<typename T>
 constexpr eType type_to_type()
 {
-    if constexpr ( std::is_arithmetic_v<T>)
+    if constexpr ( std::is_arithmetic_v<T>) // integer or float types
     {
         return eType::SCALAR;
     }
@@ -164,9 +178,21 @@ constexpr eType type_to_type()
     {
         constexpr auto component = type_to_component<T>();
         constexpr auto size      = component_size(component);
-        // either a vec4 or a mat2
-        if constexpr ( sizeof(T) / size == 4 )
+        constexpr auto componentCount = sizeof(T) / size;
+
+        static_assert(componentCount == 1 ||
+                      componentCount == 2 ||
+                      componentCount == 3 ||
+                      componentCount == 4 ||
+                      componentCount == 9 ||
+                      componentCount == 16);
+
+        if constexpr ( componentCount == 4 )
         {
+            // either a vec4 or a mat2
+            // so we need to determine whether V[0] is an arithmetic type
+            // or a
+
             struct S
             {
                 auto operator()()
@@ -178,15 +204,20 @@ constexpr eType type_to_type()
             //std::invoke_result
             if constexpr( std::is_arithmetic_v< typename std::invoke_result<S>::type> )
             {
+                // T[0]  is  arithmetic so its vec4
                 return eType::VEC4;
             }
             else
             {
+                // T[0] is likely a vec[2] so its a matrix
                 return eType::MAT2;
             }
         }
         else
         {
+
+            // in all other cases we can determine the type by the total number
+            // of components
             switch ( sizeof(T) / size)
             {
                 case 1:
@@ -205,6 +236,7 @@ constexpr eType type_to_type()
                     return eType::UNKNOWN;
             }
         }
+
     }
 }
 
@@ -1028,7 +1060,16 @@ struct MeshPrimitive
         dc.vertexCount  = static_cast<uint32_t>(P.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(P.indexCount() );
 
-        if( isSimilar(P) )
+        if(!POSITION  .canMerge(P.POSITION   )) throw std::runtime_error("Cannot merge. POSITION attribute of meshes are not the same.");
+        if(!NORMAL    .canMerge(P.NORMAL     )) throw std::runtime_error("Cannot merge. NORMAL attribute of meshes are not the same.");
+        if(!TANGENT   .canMerge(P.TANGENT    )) throw std::runtime_error("Cannot merge. TANGENT attribute of meshes are not the same.");
+        if(!TEXCOORD_0.canMerge(P.TEXCOORD_0 )) throw std::runtime_error("Cannot merge. TEXCOORD_0 attribute of meshes are not the same.");
+        if(!TEXCOORD_1.canMerge(P.TEXCOORD_1 )) throw std::runtime_error("Cannot merge. TEXCOORD_1 attribute of meshes are not the same.");
+        if(!COLOR_0   .canMerge(P.COLOR_0    )) throw std::runtime_error("Cannot merge. COLOR_0 attribute of meshes are not the same.");
+        if(!JOINTS_0  .canMerge(P.JOINTS_0   )) throw std::runtime_error("Cannot merge. JOINTS_0 attribute of meshes are not the same.");
+        if(!WEIGHTS_0 .canMerge(P.WEIGHTS_0  )) throw std::runtime_error("Cannot merge. WEIGHTS_0 attribute of meshes are not the same.");
+        if(!INDEX     .canMerge(P.INDEX      )) throw std::runtime_error("Cannot merge. INDEX attribute of meshes are not the same.");
+
         {
             POSITION  .merge(P.POSITION  );
             NORMAL    .merge(P.NORMAL    );
@@ -1063,7 +1104,6 @@ struct MeshPrimitive
 
             return dc;
         }
-        throw std::runtime_error("MeshPrimitives are not similar");
     }
 
     /**
@@ -1820,6 +1860,7 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
         M2.NORMAL     = N2;
         M2.TEXCOORD_0 = U2;
         M2.INDEX      = I2;
+        M2.INDEX.setType(eType::SCALAR);
 
         M.merge(M2, true);
 
@@ -1844,6 +1885,7 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
             M2.POSITION = P2;
             M2.NORMAL = N2;
             M2.TEXCOORD_0 = U2;
+            M2.INDEX.setType(eType::SCALAR);
 
             M.merge(M2, true);
         }

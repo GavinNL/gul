@@ -507,3 +507,18 @@ SCENARIO("Bounding Sphere")
         REQUIRE( sr1 < 1.09f );
     }
 }
+
+
+SCENARIO("Test Base Primitives")
+{
+    // box mesh has position, normals, texcoords0, index
+    auto B = gul::Box(1,1,1);
+    auto S = gul::Sphere(1.0);
+    auto C = gul::Cylinder();
+
+
+    REQUIRE( B.vertexCount() > 0);
+    REQUIRE( S.vertexCount() > 0);
+    REQUIRE( C.vertexCount() > 0);
+
+}
