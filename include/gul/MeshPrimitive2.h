@@ -494,6 +494,12 @@ struct VertexAttribute
     {
         return m_data.data();
     }
+
+    void const* data() const
+    {
+        return m_data.data();
+    }
+
     /**
      * @brief getAttributeSize
      * @return
