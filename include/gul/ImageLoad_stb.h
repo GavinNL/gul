@@ -37,7 +37,7 @@ namespace gul
 inline gul::Image loadImage(fs::path const & p, int desiredChannels=4)
 {
     int x,y,n;
-    unsigned char *data = stbi_load(p.c_str(), &x, &y, &n, desiredChannels);
+    unsigned char *data = stbi_load(p.string().c_str(), &x, &y, &n, desiredChannels);
 
     gul::Image I( static_cast<uint32_t>(x), static_cast<uint32_t>(y), static_cast<uint32_t>(desiredChannels) );
     std::memcpy(I.data(), data, I.byteSize());
