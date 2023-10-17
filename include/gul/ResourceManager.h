@@ -536,6 +536,11 @@ struct SingleResourceManager
         return m_data->m_resources.end();
     }
 
+    size_t count() const
+    {
+        return m_data->m_resources.size();
+    }
+
 protected:
     std::shared_ptr<SingleResourceManagerData<resource_type> > m_data;
 };
