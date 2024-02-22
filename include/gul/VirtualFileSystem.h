@@ -6,9 +6,12 @@
 #include <map>
 #include <iostream>
 #include <vector>
+#include <set>
 
 namespace gul
 {
+
+#define USE_UNION
 
 static bool is_base_of(std::filesystem::path const & base, std::filesystem::path const & full)
 {
@@ -40,7 +43,118 @@ struct Directory
 
 struct Mount
 {
-    std::filesystem::path host;
+    using host_path_type = std::filesystem::path;
+
+#ifdef USE_UNION
+    std::vector<host_path_type> hosts;
+
+    Mount() = default;
+    Mount(host_path_type const &r)
+    {
+        hosts.push_back(r);
+    }
+    Mount(std::vector<host_path_type> const &r) : hosts(r)
+    {
+    }
+    template<typename callable_t>
+    void for_each(host_path_type stem, callable_t && CC) const
+    {
+        std::set<host_path_type> _set;
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            auto & host = *it;
+            if(!std::filesystem::exists(host / stem))
+                continue;
+            for(auto & A : std::filesystem::directory_iterator(host / stem))
+            {
+                auto stem2 = A.path().lexically_relative(host/stem);
+                if(_set.insert(stem2).second) // need a set so that multiple items
+                {                            // dont get duplicated
+                    CC(stem2);
+                }
+            }
+        }
+    }
+
+    bool is_directory(std::filesystem::path const & stem) const
+    {
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            if(std::filesystem::exists( *it / stem))
+            {
+                return std::filesystem::is_directory(*it/stem);
+            }
+        }
+        return false;
+    }
+    bool is_file(std::filesystem::path const & stem) const
+    {
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            if(std::filesystem::exists( *it / stem))
+            {
+                return std::filesystem::is_regular_file(*it/stem);
+            }
+        }
+        return false;
+    }
+    bool exists(std::filesystem::path const & stem) const
+    {
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            if(std::filesystem::exists( *it / stem))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool file_size(std::filesystem::path const & stem) const
+    {
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            if(std::filesystem::exists( *it / stem))
+            {
+                return std::filesystem::file_size(*it/stem);
+            }
+        }
+        return false;
+    }
+    host_path_type host_path(std::filesystem::path const & stem) const
+    {
+        for(auto it = hosts.rbegin(); it!=hosts.rend(); ++it)
+        {
+            if(std::filesystem::exists( *it / stem))
+            {
+                return *it/stem;
+            }
+        }
+        return {};
+    }
+#else
+    host_path_type host;
+    bool is_directory(std::filesystem::path const & stem) const
+    {
+        return std::filesystem::is_directory( host / stem);
+    }
+    bool is_file(std::filesystem::path const & stem) const
+    {
+        return std::filesystem::is_regular_file( host / stem);
+    }
+    bool exists(std::filesystem::path const & stem) const
+    {
+        return std::filesystem::exists( host / stem);
+    }
+    auto file_size(std::filesystem::path const & stem) const
+    {
+        return std::filesystem::file_size(host / stem);
+    }
+    auto host_path(std::filesystem::path const & stem) const
+    {
+        return host / stem;
+    }
+#endif
 };
 
 using FileDescriptor = std::variant<File, Directory, Mount>;
@@ -71,9 +185,14 @@ struct VFS
 
     void mount(vfs_path_type const & pf, host_path_type const & host)
     {
-        Mount m{host};
-        desc[pf] = m;
+        desc[pf] = Mount(host);
     }
+
+    void mount(vfs_path_type const & pf, std::vector<host_path_type> const & host)
+    {
+        desc[pf] = Mount(host);
+    }
+
     void unmount(vfs_path_type const & pf)
     {
         desc.erase(pf);
@@ -122,15 +241,16 @@ struct VFS
 
         if(std::holds_alternative<Mount>(M))
         {
+#ifdef USE_UNION
+            std::get<Mount>(M).for_each(stem, CC);
+#else
             auto & host = std::get<Mount>(M).host;
             for(auto & A : std::filesystem::directory_iterator(host / stem))
             {
                 CC(A.path().lexically_relative(host / stem));
             }
-
+#endif
         }
-
-
     }
 
     /**
@@ -155,7 +275,7 @@ struct VFS
         if(!mnt.empty())
         {
             auto & M = std::get<Mount>(desc.at(mnt));
-            return std::filesystem::exists( M.host / stem);
+            return M.exists(stem);
         }
         return false;
     }
@@ -208,7 +328,7 @@ struct VFS
         if(!mnt.empty())
         {
             auto & M = std::get<Mount>(desc.at(mnt));
-            return std::filesystem::is_directory( M.host / stem);
+            return M.is_directory(stem);
         }
         return false;
     }
@@ -227,7 +347,7 @@ struct VFS
         if(!mnt.empty())
         {
             auto & M = std::get<Mount>(desc.at(mnt));
-            return std::filesystem::is_regular_file(M.host / stem);
+            return M.is_file(stem);
         }
         return false;
     }
@@ -250,7 +370,7 @@ struct VFS
         if(!mnt.empty())
         {
             auto & M = std::get<Mount>(desc.at(mnt));
-            return std::filesystem::file_size(M.host / stem);
+            return M.file_size(stem);
         }
         return 0;
     }
@@ -282,7 +402,7 @@ struct VFS
         if(!mnt.empty())
         {
             auto & M = std::get<Mount>(desc.at(mnt));
-            return M.host / stem;
+            return M.host_path(stem);
         }
         return {};
     }

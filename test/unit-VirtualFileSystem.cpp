@@ -100,6 +100,28 @@ SCENARIO("SDF3")
     REQUIRE(fs.is_directory("/res/src2"));
     //REQUIRE(fs.is_directory("/res/src/test"));
 
+   // tree(fs);
+}
+
+SCENARIO("SDF4")
+{
+    gul::Mount M;
+    gul::VFS fs;
+
+    fs.mount("/res", {
+                         std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake"
+                         ,std::filesystem::path(CMAKE_SOURCE_DIR)/"test"
+                     });
+
+
+    fs.list("/res/data");
     tree(fs);
+//    M.hosts.push_back(std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake");
+//    M.hosts.push_back(std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake");
+
+  //  M.for_each([](auto v)
+  //  {
+  //      std::cout << v << std::endl;
+  //  });
 
 }
