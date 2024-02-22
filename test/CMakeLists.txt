@@ -77,6 +77,7 @@ foreach(file ${files})
 
     target_compile_definitions(${EXE_NAME}
                                PRIVATE
+                                   CMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
                                    CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
     add_test(  NAME    ${TEST_NAME}
