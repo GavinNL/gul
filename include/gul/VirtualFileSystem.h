@@ -1,6 +1,7 @@
 #ifndef GUL_VIRTUAL_FILESYSTEM_H
 #define GUL_VIRTUAL_FILESYSTEM_H
 
+#include <variant>
 #include <filesystem>
 #include <map>
 #include<fstream>
@@ -9,6 +10,310 @@
 
 namespace gul
 {
+
+static bool is_base_of(std::filesystem::path const & base, std::filesystem::path const & full)
+{
+    //(void)base;
+    //(void)full;
+    //auto relPath = base.lexically_relative(full);
+    auto relPath2 = full.lexically_relative(base);
+    //std::cout << relPath << std::endl;
+    //std::cout << relPath2 << std::endl;
+    if(!relPath2.empty())
+    {
+        if(*relPath2.begin() == "..")
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct File
+{
+    std::vector<uint8_t> data;
+};
+
+struct Directory
+{
+    std::vector<std::shared_ptr<void>> descriptors;
+};
+
+struct Mount
+{
+    std::filesystem::path host;
+};
+
+using FileDescriptor = std::variant<File, Directory, Mount>;
+
+
+struct VFS
+{
+    using vfs_path_type  = std::filesystem::path;
+    using host_path_type = std::filesystem::path;
+
+    VFS()
+    {
+        desc["/"] = Directory{};
+    }
+
+    void mkdir(vfs_path_type const pf)
+    {
+        if(is_directory(pf.parent_path()) )
+        {
+            desc[pf] = Directory{};
+        }
+        else
+        {
+            mkdir(pf.parent_path());
+            mkdir(pf);
+        }
+    }
+
+    void mount(vfs_path_type const & pf, host_path_type const & host)
+    {
+        Mount m{host};
+        desc[pf] = m;
+    }
+    void unmount(vfs_path_type const & pf)
+    {
+        desc.erase(pf);
+    }
+
+
+    void list(vfs_path_type const & p) const
+    {
+        for_each(p, [](auto v)
+        {
+            std::cout << v << std::endl;
+        });
+    }
+
+    template<typename callable_t>
+    void for_each(vfs_path_type const & p, callable_t && CC) const
+    {
+        auto [mnt, stem] = splitMount(p);
+
+        if(mnt.empty())
+        {
+            // The path, p, does not contain a mount point
+            // check if p exists in the descriptors
+            auto it = desc.find(p);
+            if(it != desc.end())
+            {
+                ++it;
+                while(it != desc.end())
+                {
+                    if(is_base_of(p, it->first))
+                    {
+                        auto removeBase = it->first.lexically_relative(p);
+                        if(1==std::distance(removeBase.begin(), removeBase.end()))
+                        {
+                            CC(removeBase);
+                        }
+                        //CC(it->first);
+                    }
+                    ++it;
+                }
+                // we found a descriptor with that
+            }
+            return;
+        }
+        auto & M = desc.at(mnt);
+
+        if(std::holds_alternative<Mount>(M))
+        {
+            auto & host = std::get<Mount>(M).host;
+            for(auto & A : std::filesystem::directory_iterator(host / stem))
+            {
+                CC(A.path().lexically_relative(host / stem));
+            }
+
+        }
+
+
+    }
+
+    template<typename callable_t>
+    void for_each3(vfs_path_type const & p, callable_t && CC) const
+    {
+        auto it = desc.find(p);
+        while( it != desc.end())
+        {
+            if(std::holds_alternative<Mount>(it->second))
+            {
+                // this is a mount point, so loop through all the files
+                // on the host
+                auto & M = std::get<Mount>(it->second);
+                for(auto & A : std::filesystem::directory_iterator(M.host))
+                {
+                    CC(A.path().lexically_relative(M.host));
+                }
+
+                // But there might also be another mount point
+                // at  p / mnt
+                //
+            }
+            else if(std::holds_alternative<Directory>(it->second))
+            {
+                (void)is_base_of;
+                while(it != desc.end())
+                {
+                    auto name = it->first.lexically_relative(p);
+                    auto s = std::distance(name.begin(), name.end());
+                    if(s == 1 && name != ".")
+                        CC(name);
+                        //std::cout << name << "  " << s << std::endl;
+                    ++it;
+                }
+                return;
+            }
+            ++it;
+        }
+    }
+
+    /**
+     * @brief exists
+     * @param pf
+     * @return
+     *
+     * Returns true if the file exists in the VFS.
+     */
+    bool exists(vfs_path_type const & pf) const
+    {
+        assert(pf.is_absolute());
+
+        auto it = desc.find(pf);
+
+        // exists in the Virtual files
+        if(it != desc.end())
+        {
+            return true;
+        }
+
+        // pf doesn't have an explicit location in the file descriptors
+        // map
+        // so that means it is likely in some folder within a mounted
+        // filesystem
+        //
+        // So work backwards from the filename until we find
+        // a mount point:
+        // for example:
+        // Given pf = /path/to/some/file.txt
+        //
+        // and a mount point "/path -> /home/bob" exists
+        // then search if /home/bob/to/some/file.txt exists
+        // in the host file system and
+
+        // then left == path/to/some/file.txt
+        vfs_path_type left = pf.relative_path();
+        // right is empty
+        vfs_path_type right;
+
+        while(!left.empty())
+        {
+            // if 'left' is a mount point to the host
+            // then check if right exists the filesystem
+            if(is_mount(vfs_path_type("/") / left))
+            {
+                return std::filesystem::exists(std::get<Mount>(desc.at(vfs_path_type("/") / left)).host / right);
+            }
+
+            // remove the filename from 'left' and
+            // append it to the front of 'right'
+
+            // left = path/to/some
+            // right = file.txt
+            right = right.empty() ? left.filename() : (left.filename() / right);
+            left = left.parent_path();
+        }
+
+        return false;
+    }
+
+    bool is_mount(vfs_path_type const & pf) const
+    {
+        auto it = desc.find(pf);
+        if(it == desc.end())
+            return false;
+        return std::holds_alternative<Mount>(it->second);
+    }
+
+    std::pair<vfs_path_type, vfs_path_type> splitMount(vfs_path_type const & pf) const
+    {
+        vfs_path_type left = pf.relative_path();
+        vfs_path_type right;
+        while(!left.empty())
+        {
+            // if 'left' is a mount point to the host
+            // then check if right exists the filesystem
+            if(is_mount(vfs_path_type("/") / left))
+            {
+                return {vfs_path_type("/") / left, right};
+            }
+
+            // remove the filename from 'left' and
+            // append it to the front of 'right'
+
+            // left = path/to/some
+            // right = file.txt
+            right = right.empty() ? left.filename() : (left.filename() / right);
+            left = left.parent_path();
+        }
+        return {};
+    }
+
+
+    bool is_directory(vfs_path_type const & pf) const
+    {
+        assert(pf.is_absolute());
+
+        auto it = desc.find(pf);
+        // exists in the Virtual files
+        if(it != desc.end())
+        {
+            return std::holds_alternative<Directory>(it->second)
+                   || std::holds_alternative<Mount>(it->second);
+        }
+
+        auto [mnt, stem] = splitMount(pf);
+        if(!mnt.empty())
+        {
+            auto & M = std::get<Mount>(desc.at(mnt));
+            return std::filesystem::is_directory( M.host / stem);
+        }
+        return false;
+    }
+
+    bool is_file(vfs_path_type const & pf) const
+    {
+        assert(pf.is_absolute());
+
+        auto it = desc.find(pf);
+        // exists in the Virtual files
+        if(it != desc.end())
+        {
+            return std::holds_alternative<File>(it->second);
+        }
+
+        auto [mnt, stem] = splitMount(pf);
+        if(!mnt.empty())
+        {
+            auto & M = std::get<Mount>(desc.at(mnt));
+            return std::filesystem::is_regular_file(M.host / stem);
+        }
+        return false;
+    }
+    void print()
+    {
+        for(auto &[a,b] : desc)
+        {
+            std::cout << a << std::endl;
+        }
+    }
+
+    std::map<vfs_path_type, FileDescriptor> desc;
+};
 
 struct HostPath
 {
@@ -68,6 +373,19 @@ struct HostPath
             }
         }
     }
+    template<typename callable_t>
+    void for_each(std::filesystem::path const & p, callable_t && c) const
+    {
+        for(auto it = pathOnHost.rbegin(); it!=pathOnHost.rend(); ++it)
+        {
+            auto & b = *it;
+            for(auto & A : std::filesystem::directory_iterator(b / p))
+            {
+                auto actualPath = A.path().lexically_relative(b);
+                c(actualPath);
+            }
+        }
+    }
 };
 
 struct VirtualFileSystem
@@ -77,12 +395,17 @@ struct VirtualFileSystem
 
     VirtualFileSystem()
     {
+        //mount("/", {});
        // _rootMounts["/"] = {};
     }
     void mount(vfs_path_type mountPoint, HostPath p)
     {
         if(_rootMounts.count(mountPoint))
             throw std::runtime_error("Mount point already exists");
+
+        if(_rootMounts.size() != 0 && !exists(mountPoint.parent_path()))
+            throw std::runtime_error("FOlder does not exist");
+
         _rootMounts[mountPoint] = p;
     }
 
@@ -119,25 +442,44 @@ struct VirtualFileSystem
         return false;
     }
 
-    static bool is_base_of(vfs_path_type const & base, vfs_path_type const & full)
-    {
-        //(void)base;
-        //(void)full;
-        //auto relPath = base.lexically_relative(full);
-        auto relPath2 = full.lexically_relative(base);
-        //std::cout << relPath << std::endl;
-        //std::cout << relPath2 << std::endl;
-        if(!relPath2.empty())
-        {
-            if(*relPath2.begin() == "..")
-            {
-                return false;
-            }
-        }
-        return true;
-    }
+
+
     template<typename callable_t>
     void for_each(vfs_path_type const &vfsPath, callable_t && CC) const
+    {
+        auto a = vfsPath;
+        //while(!vfsPath.empty())
+        {
+            if(is_mount(a))
+            {
+                auto & M = _rootMounts.at(a);
+                if(M.pathOnHost.empty())
+                {
+                    // an empty mount
+                    for(auto & [mnt, M2] : _rootMounts)
+                    {
+                        if(mnt.parent_path() == vfsPath)
+                        {
+                            CC(mnt.filename());
+                        }
+                    }
+                }
+                M.for_each(CC);
+                return;
+            }
+            else
+            {
+                auto h = host_path(vfsPath);
+                for(auto & A : std::filesystem::directory_iterator(h))
+                {
+                    auto actualPath = A.path().filename();//lexically_relative(h);
+                    CC(actualPath);
+                }
+            }
+        }
+    }
+    template<typename callable_t>
+    void for_each1(vfs_path_type const &vfsPath, callable_t && CC) const
     {
         assert(vfsPath.is_absolute());
         //std::cout << "Listing dir: " << vfsPath << std::endl;
@@ -168,64 +510,29 @@ struct VirtualFileSystem
         }
         else
         {
-            // not a mount point, so
-        }
-        return;
-        for(auto & [a,b] : _rootMounts)
-        {
-            auto relPath  = a.lexically_relative(vfsPath);
-            auto relPath2 = vfsPath.lexically_relative(a);
-
-            if(relPath == ".") // this is a mount point
+            // not a mount point, so check all other mount points
+            for(auto & [mnt, M] : _rootMounts)
             {
-                // loop through all items in the mount point's host
-                // directory
-                std::cout << "Is Mount point: " << vfsPath << std::endl;
-                if(!b.pathOnHost.empty())
+                if(is_base_of(mnt, vfsPath ))
                 {
-                    // for each in side the mount point
-                    b.for_each([&CC](auto const & _file)
-                               {
-                                   CC(_file);
-                               });
-                    // We now have to check if any of the current
-                    // mount points is a base of vfs
-                    for(auto & [A,B] : _rootMounts)
-                    {
-                        if(is_base_of(vfsPath, A))
-                        {
-                            auto lr = A.lexically_relative(vfsPath);
-                            if(lr != ".")
-                                CC(lr);
-                        }
-                    }
-                }
-                else
-                {
-                    for(auto & [A,B] : _rootMounts)
-                    {
-                        if(is_base_of(a, A))
-                        {
-                            auto S2 = A.relative_path();
-                            if(!S2.empty())
-                                CC(S2);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if(is_base_of(a, vfsPath))
-                {
-                    auto host_path = b.host_path(relPath2);
-                    if(std::filesystem::is_directory(host_path))
-                    {
-                        for(auto & A : std::filesystem::directory_iterator(host_path))
-                        {
-                            auto actualPath = A.path().lexically_relative(host_path);
-                            CC(actualPath);
-                        }
 
+                    if(M.exists(vfsPath.lexically_relative(mnt)))
+                    {
+                        //std::cout << mnt << "   " << std::endl;;
+                        //std::cout << "   " <<  vfsPath.lexically_relative(mnt) << std::endl;
+                        for(auto it = M.pathOnHost.rbegin(); it!=M.pathOnHost.rend(); ++it)
+                        {
+                            auto & b = *it;
+                            for(auto & A : std::filesystem::directory_iterator(b))
+                            {
+                                auto actualPath = A.path();
+                                CC(actualPath);
+                            }
+                        }
+                        //M.for_each([&CC](auto const & vv)
+                        //           {
+                        //               CC(vv);
+                        //           });
                     }
                 }
             }

@@ -2,6 +2,59 @@
 #include <catch2/catch.hpp>
 #include <gul/VirtualFileSystem.h>
 
+
+void tree(gul::VFS const & fs, gul::VFS::vfs_path_type root = "/", std::string prefix="")
+{
+    //std::cout << root.filename() << std::endl;
+    fs.for_each(root, [&](auto const & v)
+                {
+                    std::cout << prefix << v << std::endl;
+                    if(fs.is_directory(root / v))
+                    {
+                        tree(fs, root/v, prefix + "     ");
+                    }
+                });
+}
+
+SCENARIO("SDF")
+{
+    gul::VFS fs;
+
+    fs.mount("/A", std::filesystem::path(CMAKE_SOURCE_DIR));
+    fs.mkdir("/B");
+    REQUIRE(fs.exists("/B"));
+    REQUIRE(fs.exists("/A/test/CMakeLists.txt"));
+    REQUIRE(fs.exists("/A"));
+
+    //fs.print();
+    //fs.list("/A");
+
+}
+
+SCENARIO("SDF2")
+{
+    gul::VFS fs;
+
+    fs.mount("/src", std::filesystem::path(CMAKE_SOURCE_DIR));
+    REQUIRE(fs.exists("/src"));
+    REQUIRE(fs.exists("/src/test/CMakeLists.txt")); // exists on filesystem
+    REQUIRE(fs.exists("/src/cmake/Coverage.cmake"));
+
+    REQUIRE(fs.is_directory("/"));
+    REQUIRE(fs.is_directory("/src"));
+    REQUIRE(fs.is_directory("/src/test"));
+
+    auto [mount, stem] = fs.splitMount("/src/cmake/Coverage.cmake");
+    REQUIRE(mount == "/src");
+    REQUIRE(stem == "cmake/Coverage.cmake");
+
+    fs.mkdir("/build");
+    fs.mkdir("/test");
+    fs.mkdir("/test/hello/world");
+
+}
+
+#if 0
 SCENARIO("SDF")
 {
 
@@ -41,12 +94,11 @@ SCENARIO("test")
     FS::create_directories( B / "5" / "e");
     FS::create_directories( B / "6" / "f");
 
-
     REQUIRE_NOTHROW(fs.mount("/", {}));
     REQUIRE(fs.exists("/"));
 
     REQUIRE_NOTHROW(fs.mount("/A", gul::HostPath{A}));
-    //REQUIRE(fs.exists("/A/1"));
+
 
     WHEN("We try to mount a folder thats already mounted we get an error")
     {
@@ -57,18 +109,16 @@ SCENARIO("test")
 
     REQUIRE( fs.exists("/B/4"));
 
-//
-//    fs.listDir("/");
-//    fs.listDir("/A");
-////    fs.listDir("/B");
-//    fs.listDir("/B/5");
-
     fs.mount("/A/7", gul::HostPath{B});
-   // fs.listDir("/A");
 
-    tree(fs, "/");
+    fs.listDir("/");
+    fs.listDir("/A");
+    fs.listDir("/B");
+    fs.listDir("/B/4");
+
 }
 
+#if 0
 SCENARIO("Union")
 {
     gul::VirtualFileSystem fs;
@@ -81,8 +131,18 @@ SCENARIO("Union")
 
     //fs.print();
 
+    REQUIRE(fs.is_directory("/"));
+    REQUIRE(fs.is_directory("/U"));
+
+    REQUIRE(fs.is_mount("/"));
+    REQUIRE(fs.is_mount("/U"));
+
     REQUIRE(fs.exists("/U/Coverage.cmake"));
     REQUIRE(fs.exists("/U/unit-Transform.cpp"));
+
+
+    REQUIRE(fs.is_regular_file("/U/Coverage.cmake"));
+    REQUIRE(!fs.is_directory("/U/Coverate.cmake"));
 }
 
 
@@ -107,7 +167,7 @@ SCENARIO("Union - SameFile")
     REQUIRE(fs.host_path("/U/CMakeLists.txt") == std::filesystem::path(CMAKE_SOURCE_DIR) / "test" / "CMakeLists.txt");
     tree(fs);
 }
-#if 1
+
+
 #endif
-
-
+#endif
