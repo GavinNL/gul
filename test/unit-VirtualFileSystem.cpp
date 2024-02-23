@@ -5,7 +5,6 @@
 
 void tree(gul::VFS const & fs, gul::VFS::vfs_path_type root = "/", std::string prefix="")
 {
-    //std::cout << root.filename() << std::endl;
     fs.for_each(root, [&](auto const & v)
                 {
                     std::cout << prefix << v << std::endl;
@@ -25,13 +24,9 @@ SCENARIO("SDF")
     REQUIRE(fs.exists("/B"));
     REQUIRE(fs.exists("/A/test/CMakeLists.txt"));
     REQUIRE(fs.exists("/A"));
-
-    //fs.print();
-    //fs.list("/A");
-
 }
 
-SCENARIO("SDF2")
+SCENARIO("Mount host folders in separate locations in root folder")
 {
     gul::VFS fs;
 
@@ -71,7 +66,7 @@ SCENARIO("SDF2")
 }
 
 
-SCENARIO("SDF3")
+SCENARIO("Mount two host folders inside a virtual folder")
 {
     gul::VFS fs;
 
@@ -103,7 +98,7 @@ SCENARIO("SDF3")
    // tree(fs);
 }
 
-SCENARIO("SDF4")
+SCENARIO("Union mount two host folders")
 {
     gul::Mount M;
     gul::VFS fs;
@@ -114,14 +109,33 @@ SCENARIO("SDF4")
                      });
 
 
-    fs.list("/res/data");
-    tree(fs);
-//    M.hosts.push_back(std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake");
-//    M.hosts.push_back(std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake");
+    REQUIRE(fs.exists("/res/CMakeLists.txt"));
+    REQUIRE(fs.exists("/res/Coverage.cmake"));
+    REQUIRE(fs.exists("/res/data/test.obj"));
 
-  //  M.for_each([](auto v)
-  //  {
-  //      std::cout << v << std::endl;
-  //  });
+    tree(fs);
+}
+#if 1
+SCENARIO("Mount a folder inside the structure of another mount")
+{
+    gul::Mount M;
+    gul::VFS fs;
+
+
+    fs.mount("/test", {
+                         std::filesystem::path(CMAKE_SOURCE_DIR)/"test"
+                     });
+    tree(fs);
+    REQUIRE(fs.exists("/test/data/test.obj"));
+
+    fs.mount("/test/data", {
+                         std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake"
+                     });
+    REQUIRE(fs.exists("/test/data/Coverage.cmake"));
+
+    std::shared_ptr<std::ostream> d = std::shared_ptr<std::ostringstream>();
+    tree(fs);
+
 
 }
+#endif

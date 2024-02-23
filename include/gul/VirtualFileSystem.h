@@ -13,14 +13,18 @@ namespace gul
 
 #define USE_UNION
 
-static bool is_base_of(std::filesystem::path const & base, std::filesystem::path const & full)
+/**
+ * @brief is_base_of
+ * @param base
+ * @param full
+ * @return
+ *
+ * Returns true if base exists at the start of full. For strings, this would be equivelant too
+ * full.starts_with(base)
+ */
+inline bool is_base_of(std::filesystem::path const & base, std::filesystem::path const & full)
 {
-    //(void)base;
-    //(void)full;
-    //auto relPath = base.lexically_relative(full);
     auto relPath2 = full.lexically_relative(base);
-    //std::cout << relPath << std::endl;
-    //std::cout << relPath2 << std::endl;
     if(!relPath2.empty())
     {
         if(*relPath2.begin() == "..")
@@ -208,6 +212,12 @@ struct VFS
     }
 
     template<typename callable_t>
+    void for_each_file(vfs_path_type const & p, callable_t && C) const
+    {
+        return for_each(p,C);
+    }
+
+    template<typename callable_t>
     void for_each(vfs_path_type const & p, callable_t && CC) const
     {
         auto [mnt, stem] = splitMount(p);
@@ -229,11 +239,9 @@ struct VFS
                         {
                             CC(removeBase);
                         }
-                        //CC(it->first);
                     }
                     ++it;
                 }
-                // we found a descriptor with that
             }
             return;
         }
@@ -288,6 +296,15 @@ struct VFS
         return std::holds_alternative<Mount>(it->second);
     }
 
+    /**
+     * @brief splitMount
+     * @param pf
+     * @return
+     *
+     * Given a abs path in the VFS. return two components [mount,stem]
+     * where mount is a path to an active mount point and stem is the
+     * path within the mount
+     */
     std::pair<vfs_path_type, vfs_path_type> splitMount(vfs_path_type const & pf) const
     {
         vfs_path_type left = pf.relative_path();
@@ -309,7 +326,7 @@ struct VFS
             right = right.empty() ? left.filename() : (left.filename() / right);
             left = left.parent_path();
         }
-        return {};
+        return {{},pf};
     }
 
     bool is_directory(vfs_path_type const & pf) const
