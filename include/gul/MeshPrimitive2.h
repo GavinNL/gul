@@ -590,7 +590,7 @@ struct VertexAttribute
         auto c = attributeCount();
         auto s = getAttributeSize();
 
-        auto d_in  = static_cast<uint8_t const*>(m_data.data());
+        auto d_in  = m_data.data();
         auto d_out = static_cast<uint8_t*>(data);
         for(uint64_t i=0;i<c;i++)
         {
@@ -623,7 +623,7 @@ struct VertexAttribute
         auto c = std::min(attributeCount(), attributeCountToCopy);
         auto srcAttrSize = getAttributeSize();
 
-        auto d_in  = static_cast<uint8_t const*>(m_data.data()) + srcStartAttributeIndex * srcAttrSize;
+        auto d_in  = m_data.data() + srcStartAttributeIndex * srcAttrSize;
         auto d_in_end = std::min(d_in + srcAttrSize * attributeCountToCopy, &m_data.back()+1);
 
         auto d_out = static_cast<uint8_t*>(dstData) + dstByteOffset;
@@ -659,7 +659,7 @@ struct VertexAttribute
         auto c = std::min(attributeCount(), num);
         auto s = getAttributeSize();
 
-        auto d_in  = static_cast<uint8_t const*>(m_data.data());
+        auto d_in  = m_data.data();
         auto d_out = static_cast<uint8_t*>(data)+offset;
 
         for(uint64_t i=0;i<c;i++)
@@ -1020,6 +1020,7 @@ struct MeshPrimitive
         f |= COLOR_0    .size() == 0 ? 0 : (1u << 5);
         f |= JOINTS_0   .size() == 0 ? 0 : (1u << 6);
         f |= WEIGHTS_0  .size() == 0 ? 0 : (1u << 7);
+
         return f;
     }
 
@@ -1033,8 +1034,8 @@ struct MeshPrimitive
     Primitive getDrawCall() const
     {
         DrawCall dc;
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(vertexCount());
         dc.indexCount   = static_cast<uint32_t>(indexCount());
         dc.topology     = topology;
@@ -1586,8 +1587,8 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
@@ -1683,8 +1684,8 @@ inline MeshPrimitive Grid(int length, int width, int dl=1, int dw=1, int majorL=
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
@@ -1741,19 +1742,19 @@ inline MeshPrimitive Sphere(float radius , uint32_t rings=20, uint32_t sectors=2
     {
         for(s = 0 ; s < sectors - 1 ; s++)
         {
-            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + s) ); //0
-            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + (s+1) ) ); //1
-            I.push_back(  static_cast<uint32_t>(  r * sectors + (s+1) )); //2
-            I.push_back(  static_cast<uint32_t>( (r+1) * sectors + s )); //0
-            I.push_back(  static_cast<uint32_t>(  r * sectors + (s+1) )); //2
-            I.push_back(  static_cast<uint32_t>(   r * sectors + s )); //3
+            I.push_back(  ( (r+1) * sectors + s) ); //0
+            I.push_back(  ( (r+1) * sectors + (s+1) ) ); //1
+            I.push_back(  (  r * sectors + (s+1) )); //2
+            I.push_back(  ( (r+1) * sectors + s )); //0
+            I.push_back(  (  r * sectors + (s+1) )); //2
+            I.push_back(  (   r * sectors + s )); //3
         }
     }
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
@@ -1856,8 +1857,8 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
             U2.push_back( _vec2{ 0.5f+std::cos(t), 0.5f+std::sin(t)} );
 
             const uint32_t A = 0;
-            const uint32_t B = static_cast<uint32_t>(r+1);
-            const uint32_t C = static_cast<uint32_t>( (r+1)%rSegments+1 );
+            const uint32_t B = r+1;
+            const uint32_t C = (r+1)%rSegments+1 ;
 
             I2.push_back( std::array<uint32_t,3>({A,B,C}));
         }
@@ -1900,8 +1901,8 @@ inline MeshPrimitive Cylinder(float R=1.0f, float H=3.0f, uint32_t rSegments=16)
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
@@ -1947,8 +1948,8 @@ inline MeshPrimitive Imposter(float sideLength=1.0f)
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
@@ -2032,8 +2033,8 @@ inline MeshPrimitive revolve(float const * XYpoints, size_t numPoints, size_t se
 
     {
         auto & dc = M.primitives.emplace_back();
-        dc.indexOffset  = static_cast<int32_t>(0);
-        dc.vertexOffset = static_cast<int32_t>(0);
+        dc.indexOffset  = 0;
+        dc.vertexOffset = 0;
         dc.vertexCount  = static_cast<uint32_t>(M.vertexCount());
         dc.indexCount   = static_cast<uint32_t>(M.indexCount());
         dc.topology     = gul::Topology::TRIANGLE_LIST;
