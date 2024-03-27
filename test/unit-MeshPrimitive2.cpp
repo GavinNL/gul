@@ -522,3 +522,237 @@ SCENARIO("Test Base Primitives")
     REQUIRE( C.vertexCount() > 0);
 
 }
+
+
+SCENARIO("Load OBJ")
+{
+    std::istringstream SSO;
+    SSO.str(R"foo(# Blender v3.0.1 OBJ File: ''
+# www.blender.org
+mtllib untitled.mtl
+o Cube
+v 1.000000 1.000000 -1.000000
+v 1.000000 -1.000000 -1.000000
+v 1.000000 1.000000 1.000000
+v 1.000000 -1.000000 1.000000
+v -1.000000 1.000000 -1.000000
+v -1.000000 -1.000000 -1.000000
+v -1.000000 1.000000 1.000000
+v -1.000000 -1.000000 1.000000
+vt 0.625000 0.500000
+vt 0.875000 0.500000
+vt 0.875000 0.750000
+vt 0.625000 0.750000
+vt 0.375000 0.750000
+vt 0.625000 1.000000
+vt 0.375000 1.000000
+vt 0.375000 0.000000
+vt 0.625000 0.000000
+vt 0.625000 0.250000
+vt 0.375000 0.250000
+vt 0.125000 0.500000
+vt 0.375000 0.500000
+vt 0.125000 0.750000
+vn 0.0000 1.0000 0.0000
+vn 0.0000 0.0000 1.0000
+vn -1.0000 0.0000 0.0000
+vn 0.0000 -1.0000 0.0000
+vn 1.0000 0.0000 0.0000
+vn 0.0000 0.0000 -1.0000
+usemtl Material
+s off
+f 1/1/1 5/2/1 7/3/1 3/4/1
+f 4/5/2 3/4/2 7/6/2 8/7/2
+f 8/8/3 7/9/3 5/10/3 6/11/3
+f 6/12/4 2/13/4 4/5/4 8/14/4
+f 2/13/5 1/1/5 3/4/5 4/5/5
+f 6/11/6 5/10/6 1/1/6 2/13/6
+)foo");
+
+    using vec3      = std::array<float, 3>;
+    using vec2      = std::array<float, 2>;
+    using tri_face  = std::array<uint32_t, 3>;
+    using quad_face = std::array<uint32_t, 4>;
+
+    std::vector<vec3> pos, norm;
+    std::vector<vec2> uv;
+    std::vector<tri_face> tris;
+    std::vector<quad_face> quads;
+
+    using vertex_id = std::tuple<uint32_t, uint32_t, uint32_t>;
+    std::map<vertex_id, uint32_t> vertex_to_index;
+
+    std::string blah;
+    std::string line;
+
+    while(!SSO.eof())
+    {
+        std::getline(SSO, line);
+        if(line.empty())
+            continue;
+       // std::cout << line << std::endl;
+
+        if(line[1] == 'n')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec3 & p = norm.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+            ss >> p[2];
+            std::cout << p[0] << ", " << p[1] << ", " << p[2] << std::endl;
+        }
+        else if(line[1] == 't')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec2 & p = uv.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+            std::cout << p[0] << ", " << p[1] << std::endl;
+        }
+        else if(line[0] == 'v')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec3 & p = pos.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+            ss >> p[2];
+            std::cout << p[0] << ", " << p[1] << ", " << p[2] << std::endl;
+        }
+        else if(line[0] == 'f')
+        {
+            // f 6/11/6 5/10/6 1/1/6 2/13/6
+            // f 6/11/6 5/10/6 1/1/6
+            // f 6//6 5//6 1//6
+            // f 6 5 1
+            std::istringstream ss(line);
+            std::string _b;
+            ss >> _b; // read the 'f'
+
+            auto _extractVertexID = [](std::string str)
+            {
+                std::istringstream s(str);
+                vertex_id v = {};
+                // can either be a/b/c
+                //               a//c
+                //               a
+                s >> std::get<0>(v);
+                if(s.eof())
+                    return v;
+
+
+                if(s.peek() == '/')
+                {
+                    s.get();
+                }
+                if(s.peek() == '/')
+                {
+                    s.get();
+                    s >> std::get<2>(v);
+                }
+                else
+                {
+                    s >> std::get<1>(v);
+                }
+
+                if(s.peek() == '/')
+                {
+                    s.get();
+                    s >> std::get<2>(v);
+                }
+                return v;
+            };
+
+            std::array<vertex_id, 4> _faceIndex;
+            uint32_t j=0;
+            while(!ss.eof())
+            {
+                std::string vertex_id_str;
+                ss >> vertex_id_str;
+
+                if(!vertex_id_str.empty())
+                {
+                    auto & V = _faceIndex[j++] = _extractVertexID(vertex_id_str);
+                    std::cout << std::get<0>(V) << "  " <<  std::get<1>(V) << "  " << std::get<2>(V) << std::endl;
+                }
+            }
+
+            // we now have the verttex'x position index, normal index and uv index
+            // in the form of a 3-tuple
+            // Insert the tuple into the ma
+            if(j==3) // triangle
+            {
+                tri_face t = { vertex_to_index.insert( {_faceIndex[0], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[1], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[2], static_cast<uint32_t>(vertex_to_index.size())}).first->second};
+
+                tris.push_back(t);
+            }
+            if(j==4) // triangle
+            {
+               quad_face t = { vertex_to_index.insert( {_faceIndex[0], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[1], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[2], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[3], static_cast<uint32_t>(vertex_to_index.size())}).first->second};
+
+                quads.push_back(t);
+            }
+            // end
+        }
+    }
+
+    for(auto & t : quads)
+    {
+        //std::cout << t[0] << ", " << t[1] << ", " << t[2] << ", " << t[3] <<  std::endl;
+        tris.push_back( {t[0], t[1], t[2]});
+        tris.push_back( {t[0], t[2], t[3]});
+    }
+    std::cout << "Total Unique Vertices: " << vertex_to_index.size() << std::endl;
+    for(auto & t : tris)
+    {
+        std::cout << t[0] << ", " << t[1] << ", " << t[2] << std::endl;
+    }
+
+    pos.resize(vertex_to_index.size());
+    norm.resize(vertex_to_index.size());
+    uv.resize(vertex_to_index.size());
+
+    gul::MeshPrimitive P;
+
+    P.TEXCOORD_0.setType(gul::eType::VEC2);
+    P.TEXCOORD_0.setComponent(gul::eComponentType::FLOAT);
+
+    P.POSITION.setType(gul::eType::VEC3);
+    P.POSITION.setComponent(gul::eComponentType::FLOAT);
+
+    P.NORMAL.setType(gul::eType::VEC3);
+    P.NORMAL.setComponent(gul::eComponentType::FLOAT);
+
+    P.POSITION.resize(vertex_to_index.size());
+    P.TEXCOORD_0.resize(vertex_to_index.size());
+    P.NORMAL.resize(vertex_to_index.size());
+
+    for(auto & [v, index] : vertex_to_index)
+    {
+        if(std::get<0>(v) != 0) P.POSITION.set(index  , pos.at( std::get<0>(v)-1) );
+        if(std::get<1>(v) != 0) P.NORMAL.set(index    , norm.at(std::get<1>(v)-1) );
+        if(std::get<2>(v) != 0) P.TEXCOORD_0.set(index, uv.at(  std::get<2>(v)-1) );
+    }
+    if(P.NORMAL.attributeCount() != P.POSITION.attributeCount())
+        P.NORMAL = {};
+    if(P.TEXCOORD_0.attributeCount() != P.POSITION.attributeCount())
+        P.TEXCOORD_0 = {};
+    //for(auto & t : tris)
+    //{
+    //    P.INDEX.push_back(t[0]);
+    //    P.INDEX.push_back(t[1]);
+    //    P.INDEX.push_back(t[2]);
+    //}
+}
+
+

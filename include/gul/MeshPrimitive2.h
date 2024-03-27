@@ -865,6 +865,42 @@ struct MeshPrimitive
         }
     }
 
+    void flipWindingOrder()
+    {
+        if(INDEX.getComponentType() == eComponentType::UNSIGNED_INT ||
+            INDEX.getComponentType() == eComponentType::INT)
+        {
+            for(uint32_t i=0;i<INDEX.attributeCount();i+=3)
+            {
+                auto _a = INDEX.get<uint32_t>(i);
+                auto _b = INDEX.get<uint32_t>(i+2);
+                INDEX.set(i,   _b);
+                INDEX.set(i+2, _a);
+            }
+        }
+        if(INDEX.getComponentType() == eComponentType::UNSIGNED_SHORT ||
+           INDEX.getComponentType() == eComponentType::SHORT)
+        {
+            for(uint32_t i=0;i<INDEX.attributeCount();i+=3)
+            {
+                auto _a = INDEX.get<uint16_t>(i);
+                auto _b = INDEX.get<uint16_t>(i+2);
+                INDEX.set(i,   _b);
+                INDEX.set(i+2, _a);
+            }
+        }
+        if(INDEX.getComponentType()  == eComponentType::UNSIGNED_BYTE ||
+            INDEX.getComponentType() == eComponentType::BYTE)
+        {
+            for(uint32_t i=0;i<INDEX.attributeCount();i+=3)
+            {
+                auto _a = INDEX.get<uint8_t>(i);
+                auto _b = INDEX.get<uint8_t>(i+2);
+                INDEX.set(i,   _b);
+                INDEX.set(i+2, _a);
+            }
+        }
+    }
 
     /**
      * @brief dump
@@ -1342,9 +1378,11 @@ struct MeshPrimitive
     /**
      * @brief fuseVertices
      *
-     * Fuse near by vertices. This may not be accurate
+     * Fuse near by vertices. This may not be accurate.
+     *
+     * Returns the number of vertices that have been fused
      */
-    void fuseVertices()
+    size_t fuseVertices()
     {
         using _vec2 = std::array<float,2>;
         using _vec3 = std::array<float,3>;
@@ -1364,12 +1402,14 @@ struct MeshPrimitive
         uint32_t index = 0;
         //uint32_t j     = 0;
 
+        constexpr float SC = 100.0f;
+
         auto vCount = vertexCount();
         for(uint32_t j=0;j<vCount;j++)
         {
             auto p = _POS.at<_vec3>(j);
 
-            _ivec3 P{ int32_t(p[0]*100.0f) , int32_t(p[1]*100.0f) , int32_t(p[2]*100.0f) };
+            _ivec3 P{ int32_t(p[0]*SC) , int32_t(p[1]*SC) , int32_t(p[2]*SC) };
 
             if( posToIndex.insert( { {P[0], P[1], P[2]}, index }).second)
             {
@@ -1387,7 +1427,7 @@ struct MeshPrimitive
         {
             auto i = _INDEX.at<uint32_t>(j);
             auto p = _POS.at<_vec3>(i);
-            _ivec3 P{ int32_t(p[0]*100.0f) , int32_t(p[1]*100.0f) , int32_t(p[2]*100.0f) };
+            _ivec3 P{ int32_t(p[0]*SC) , int32_t(p[1]*SC) , int32_t(p[2]*SC) };
             newINDEX.push_back( posToIndex.at({P[0],P[1],P[2]}) );
         }
 
@@ -1395,6 +1435,8 @@ struct MeshPrimitive
         POSITION   = NEW_POS;
         NORMAL     = NEW_NOR;
         TEXCOORD_0 = NEW_UV;
+
+        return vCount-vertexCount();
     }
 
     /**
@@ -1583,7 +1625,15 @@ inline MeshPrimitive Box(float dx , float dy , float dz )
     //=========================
     I.init(eComponentType::UNSIGNED_INT, eType::SCALAR);
     for( uint32_t j=0;j<36;j++)
+    {
+        auto y = P.get<_vec3>(j);
+        y[1] *= -1;
+        P.set(j, y);
         I.push_back( j );
+    }
+
+    M.flipWindingOrder();
+
 
     {
         auto & dc = M.primitives.emplace_back();
@@ -2290,7 +2340,200 @@ inline MeshPrimitive ReadOBJ(std::ifstream & in)
     return M;
 }
 
+
+inline MeshPrimitive readOBJ2(std::istream & SSO)
+{
+    using vec3      = std::array<float, 3>;
+    using vec2      = std::array<float, 2>;
+    using tri_face  = std::array<uint32_t, 3>;
+    using quad_face = std::array<uint32_t, 4>;
+
+    std::vector<vec3> pos, norm;
+    std::vector<vec2> uv;
+    std::vector<tri_face> tris;
+    std::vector<quad_face> quads;
+
+    using vertex_id = std::tuple<uint32_t, uint32_t, uint32_t>;
+    std::map<vertex_id, uint32_t> vertex_to_index;
+
+    std::string blah;
+    std::string line;
+
+    while(!SSO.eof())
+    {
+        std::getline(SSO, line);
+        if(line.empty())
+            continue;
+
+        if(line[1] == 'n')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec3 & p = norm.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+            ss >> p[2];
+        }
+        else if(line[1] == 't')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec2 & p = uv.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+        }
+        else if(line[0] == 'v')
+        {
+            std::istringstream ss(line);
+            std::string v;
+            vec3 & p = pos.emplace_back();
+            ss >> v;
+            ss >> p[0];
+            ss >> p[1];
+            ss >> p[2];
+        }
+        else if(line[0] == 'f')
+        {
+            // f 6/11/6 5/10/6 1/1/6 2/13/6
+            // f 6/11/6 5/10/6 1/1/6
+            // f 6//6 5//6 1//6
+            // f 6 5 1
+            std::istringstream ss(line);
+            std::string _b;
+            ss >> _b; // read the 'f'
+
+            auto _extractVertexID = [](std::string str)
+            {
+                std::istringstream s(str);
+                vertex_id v = {};
+                // can either be a/b/c
+                //               a//c
+                //               a
+                s >> std::get<0>(v);
+                if(s.eof())
+                    return v;
+
+
+                if(s.peek() == '/')
+                {
+                    s.get();
+                }
+                if(s.peek() == '/')
+                {
+                    s.get();
+                    s >> std::get<2>(v);
+                }
+                else
+                {
+                    s >> std::get<1>(v);
+                }
+
+                if(s.peek() == '/')
+                {
+                    s.get();
+                    s >> std::get<2>(v);
+                }
+                return v;
+            };
+
+            std::array<vertex_id, 4> _faceIndex;
+            uint32_t j=0;
+            while(!ss.eof())
+            {
+                std::string vertex_id_str;
+                ss >> vertex_id_str;
+
+                if(!vertex_id_str.empty())
+                {
+                    _faceIndex[j++] = _extractVertexID(vertex_id_str);
+                //    std::cout << std::get<0>(V) << "  " <<  std::get<1>(V) << "  " << std::get<2>(V) << std::endl;
+                }
+            }
+
+            // we now have the verttex'x position index, normal index and uv index
+            // in the form of a 3-tuple
+            // Insert the tuple into the ma
+            if(j==3) // triangle
+            {
+                tri_face t = { vertex_to_index.insert( {_faceIndex[0], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[1], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert( {_faceIndex[2], static_cast<uint32_t>(vertex_to_index.size())}).first->second};
+
+                tris.push_back(t);
+            }
+            if(j==4) // triangle
+            {
+                quad_face t = { vertex_to_index.insert( {_faceIndex[0], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert(  {_faceIndex[1], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert(  {_faceIndex[2], static_cast<uint32_t>(vertex_to_index.size())}).first->second,
+                               vertex_to_index.insert(  {_faceIndex[3], static_cast<uint32_t>(vertex_to_index.size())}).first->second};
+
+                quads.push_back(t);
+            }
+            // end
+        }
+    }
+
+    for(auto & t : quads)
+    {
+        tris.push_back( {t[0], t[1], t[2]});
+        tris.push_back( {t[0], t[2], t[3]});
+    }
+
+    for(auto & t : tris)
+    {
+        std::swap(t[0], t[2]);
+    }
+    // std::cout << "Total Triangles: " << tris.size() << std::endl;
+
+    // std::cout << "Total Vertices: " << pos.size() << std::endl;
+    // std::cout << "Total Position values: " << pos.size() << std::endl;
+    // std::cout << "Total Normal values: " << norm.size() << std::endl;
+    // std::cout << "Total UV     values: " << uv.size() << std::endl;
+
+    gul::MeshPrimitive P;
+
+    P.INDEX.setType(gul::eType::SCALAR);
+    P.INDEX.setComponent(gul::eComponentType::UNSIGNED_INT);
+
+    P.TEXCOORD_0.setType(gul::eType::VEC2);
+    P.TEXCOORD_0.setComponent(gul::eComponentType::FLOAT);
+
+    P.POSITION.setType(gul::eType::VEC3);
+    P.POSITION.setComponent(gul::eComponentType::FLOAT);
+
+    P.NORMAL.setType(gul::eType::VEC3);
+    P.NORMAL.setComponent(gul::eComponentType::FLOAT);
+
+    P.POSITION.resize(vertex_to_index.size());
+    P.TEXCOORD_0.resize(vertex_to_index.size());
+    P.NORMAL.resize(vertex_to_index.size());
+
+    for(auto & [v, index] : vertex_to_index)
+    {
+        if(std::get<0>(v) != 0) P.POSITION.set(index  , pos.at( std::get<0>(v)-1) );
+        if(std::get<1>(v) != 0) P.TEXCOORD_0.set(index, uv.at(  std::get<1>(v)-1) );
+        if(std::get<2>(v) != 0) P.NORMAL.set(index    , norm.at(std::get<2>(v)-1) );
+    }
+    if(P.NORMAL.attributeCount() != P.POSITION.attributeCount())
+        P.NORMAL = {};
+    if(P.TEXCOORD_0.attributeCount() != P.POSITION.attributeCount())
+        P.TEXCOORD_0 = {};
+    for(auto & t : tris)
+    {
+        P.INDEX.push_back(t[2]);
+        P.INDEX.push_back(t[1]);
+        P.INDEX.push_back(t[0]);
+    }
+    return P;
+}
+
+
+
 }
 
 #endif
+
 
