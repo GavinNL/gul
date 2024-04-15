@@ -134,6 +134,10 @@ struct Mount
                 return *it/stem;
             }
         }
+        if(hosts.size())
+        {
+            return hosts[0] / stem;
+        }
         return {};
     }
 #else
