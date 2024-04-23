@@ -2,6 +2,7 @@
 #define GUL_COROUTINE_TASK_H
 
 #include <coroutine>
+#include <utility>
 
 namespace gul
 {
@@ -74,22 +75,6 @@ struct Task_t
         {
             std::cout <<  "Unhandled Exception" << std::endl;
         }
-
-        /**
-         * @brief return_void
-         *
-         * Called when co_return void; is called.
-         *
-         * This is called before final_suspend()
-         */
-        //void return_void()
-        //{
-        //    std::cout << "return_void()\n";
-        //}
-
-        //void return_value(T value) { result = std::move(value); }
-
-        //T result;
     };
 
 
@@ -99,10 +84,30 @@ struct Task_t
     {
     }
 
+    ~Task_t()
+    {
+        if(handle)
+            handle.destroy();
+    }
+    Task_t(Task_t<T> &&V) : handle(std::exchange(V.handle, nullptr))
+    {
+    }
+    Task_t & operator=(Task_t<T> && V)
+    {
+        if(&V != this)
+        {
+            handle = std::exchange(V.handle, nullptr);
+        }
+        return *this;
+    }
+    Task_t(Task_t<T> const &handle_) = delete;
+    Task_t & operator=(Task_t<T> const & V) = delete;
+
     void resume()
     {
         handle.resume();
     }
+
     T operator()()
     {
         //handle.resume();
