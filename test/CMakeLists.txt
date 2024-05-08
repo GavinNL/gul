@@ -70,6 +70,7 @@ foreach(file ${files})
                                     ${PROJECT_NAME}-catchmain
                                     ${PROJECT_NAME}
                                     Threads::Threads
+                                    CONAN_PKG::meshoptimizer
                                     CONAN_PKG::nlohmann_json
                                     CONAN_PKG::glm
                                     CONAN_PKG::stb)

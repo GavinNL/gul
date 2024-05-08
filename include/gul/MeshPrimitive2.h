@@ -405,11 +405,19 @@ struct VertexAttribute
     template<typename T>
     void push_back(T const & v)
     {
-        auto m = m_data.size();
-        m_data.resize( m + sizeof(v));
-        std::memcpy( &m_data[m], &v, sizeof(v));
+        appendData(&v, sizeof(v));
     }
 
+    void appendData(void const *data, size_t byteCount)
+    {
+        auto m = m_data.size();
+        m_data.resize(m + byteCount);
+        std::memcpy( &m_data[m], data, byteCount);
+    }
+    void reserveBytes(size_t byteCount)
+    {
+        m_data.reserve(byteCount);
+    }
     bool empty() const
     {
         return m_data.empty();
@@ -721,6 +729,63 @@ protected:
     eType                m_type = eType::UNKNOWN;
 };
 
+
+/**
+ * @brief fromGLTFAccessor
+ * @param startOfBufferView
+ * @param bufferViewByteStride
+ * @param accessorCount
+ * @param accessorByteOffset
+ * @param accessorComponentType
+ * @param accessorType
+ * @return
+ *
+ * When reading a GLTF asset, a single mesh vertex attribute is defined
+ * in an accessor/bufferView.
+ *
+ * Given the accessor/bufferView information in the JSON file, this
+ * function will read the bytes from the raw bufferView data and return
+ * a single VertexAttribute
+ */
+inline VertexAttribute fromGLTFAccessor(void const *startOfBufferView,
+                                        uint32_t bufferViewByteStride,
+                                        uint32_t accessorCount,
+                                        uint32_t accessorByteOffset,
+                                        uint32_t accessorComponentType,
+                                        std::string accessorType)
+{
+    VertexAttribute V;
+
+    uint32_t accessorSize = component_size(static_cast<eComponentType>(accessorComponentType));
+
+    assert(accessorSize != 0);
+
+    V.setComponent(static_cast<eComponentType>(accessorComponentType));
+    if(accessorType == "SCALAR") { V.setType(eType::SCALAR); accessorSize *= 1; }
+    else if(accessorType == "VEC2")   { V.setType(eType::VEC2); accessorSize *= 2; }
+    else if(accessorType == "VEC3")   { V.setType(eType::VEC3); accessorSize *= 3; }
+    else if(accessorType == "VEC4")   { V.setType(eType::VEC4); accessorSize *= 4; }
+    else if(accessorType == "MAT2")   { V.setType(eType::MAT2); accessorSize *= 4; }
+    else if(accessorType == "MAT3")   { V.setType(eType::MAT3); accessorSize *= 9; }
+    else if(accessorType == "MAT4")   { V.setType(eType::MAT4); accessorSize *= 16;}
+
+
+    V.reserveBytes( accessorCount * accessorSize );
+
+    if(bufferViewByteStride == 0)
+    {
+        bufferViewByteStride = accessorSize;
+    }
+
+    auto _read = static_cast<uint8_t const*>(startOfBufferView) + accessorByteOffset;
+    for(uint32_t i=0;i<accessorCount;i++)
+    {
+        V.appendData(_read, accessorSize);
+        std::advance(_read, bufferViewByteStride);
+    }
+
+    return V;
+}
 //===========================================================================================================
 /**
  * @brief calculateInterleavedStride
@@ -789,7 +854,7 @@ struct DrawCall
     Topology topology     = Topology::TRIANGLE_LIST;
 };
 
-using Primitive = DrawCall;
+using SubMesh = DrawCall;
 
 /**
  * @brief forEachVertexIndex
@@ -801,7 +866,7 @@ using Primitive = DrawCall;
  *
  */
 template<typename Callable_t>
-inline void forEachVertexIndex(VertexAttribute const & _INDEX, Primitive const & p, Callable_t && C)
+inline void forEachVertexIndex(VertexAttribute const & _INDEX, SubMesh const & p, Callable_t && C)
 {
     if( _INDEX.getComponentType() == eComponentType::UNSIGNED_INT)
     {
@@ -847,7 +912,7 @@ struct MeshPrimitive
     // a vector of primitives
     // each primitive is a sub component of the mesh and
     // contains the draw call to draw it
-    std::vector<Primitive> primitives;
+    std::vector<SubMesh> primitives;
 
     void clear()
     {
@@ -1067,7 +1132,7 @@ struct MeshPrimitive
      * Returns the drawcall for the entire mesh. This can be used
      * if there are no primitives listed
      */
-    Primitive getDrawCall() const
+    SubMesh getDrawCall() const
     {
         DrawCall dc;
         dc.indexOffset  = 0;
@@ -1088,9 +1153,9 @@ struct MeshPrimitive
      *
      * The meshes can be merged only if they are similar (ie: they have the same attributes)
      */
-    Primitive merge(MeshPrimitive const & P, bool renumberIndices = false)
+    SubMesh merge(MeshPrimitive const & P, bool renumberIndices = false)
     {
-        DrawCall dc;
+        SubMesh dc;
 
         uint32_t currentVertexCount = static_cast<uint32_t>(this->vertexCount());
         uint32_t currentIndexCount  = static_cast<uint32_t>(this->INDEX.size());
@@ -1189,7 +1254,7 @@ struct MeshPrimitive
      * is fully in some quadrant, then the center of the sphere is still at the origin
      */
     template<typename PositionType=std::array<float,3>, typename IndexComponentType=uint32_t>
-    float calculateBoundingSphereRadius(Primitive const & p) const
+    float calculateBoundingSphereRadius(SubMesh const & p) const
     {
         float _Max=0.0f;
         forEachVertexIndex(INDEX, p, [&_Max, this](IndexComponentType i)
