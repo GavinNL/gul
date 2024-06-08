@@ -526,6 +526,29 @@ struct VertexAttribute
     }
 
     /**
+     * @brief componentValue
+     * @param i
+     * @return
+     *
+     * Returns the i'th component
+     *
+     * Assumes the underlying data is a packed array
+     * of type, T.
+     */
+    template<typename T>
+    T getComponentValue(size_t i)
+    {
+        T val;
+        std::memcpy(&val, m_data.data() + i * sizeof(T), sizeof(T));
+        return val;
+    }
+    template<typename T>
+    void setComponentValue(size_t i, T const & v)
+    {
+        std::memcpy( m_data.data() + i * sizeof(T), &v, sizeof(T));
+    }
+
+    /**
      * @brief attributeCount
      * @return
      *

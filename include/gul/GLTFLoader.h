@@ -196,7 +196,7 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath)
         uint32_t bi=0;
         for(auto & b : J["buffers"])
         {
-            std::cout << "Buffer found: " << b["name"] << std::endl;
+            //std::cout << "Buffer found: " << b["name"] << std::endl;
             if( b.contains("uri"))
             {
                 auto path = rootPath + "/" + b.at("uri").get<std::string>();
@@ -220,68 +220,152 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath)
 
 
 
-    for(auto & a : J["accessors"])
+    auto _extractAccessor = [](nlohmann::json const & doc, nlohmann::json const & acc, std::map<uint32_t, std::vector<char>> const & bufs) -> VertexAttribute
     {
-        auto bv_i = a["bufferView"].get<uint32_t>();
-        auto & bv = J["bufferViews"][ bv_i ];
-        auto b_i = bv["buffer"].get<uint32_t>();
-        auto & buffer = buffers[b_i];
+        auto type = acc.value("type", std::string("UNKNOWN"));
+        auto componentType = acc.value("componentType", 0u);
+        auto count = acc.value("count", 0u);
+        auto byteOffset = acc.value("byteOffset", 0u);
 
+        if(acc.count("bufferView") == 0 )
+        {
+            std::cout << "Sparse Accessor Found" << std::endl;
+            auto V = initializeFromGLTFAccessor(count, componentType, type);
+            return V;
+            /*
+            "sparse": {
+                "count": 10,
+                "indices": {
+                    "bufferView": 1,
+                    "byteOffset": 0,
+                    "componentType": 5123
+                },
+                "values": {
+                    "bufferView": 2,
+                    "byteOffset": 0
+                }
+            }
+            */
+            if(acc.count("sparse") == 0)
+                throw std::runtime_error("Invalid Accessor. bufferView is not set, and \"sprase\" property not set");
+
+            auto & sparse = acc.at("sparse");
+
+            std::cout << sparse.dump(4) << std::endl;
+            auto sparse_count = sparse.at("count").get<uint32_t>();
+
+            VertexAttribute indices;
+            VertexAttribute values;
+            {
+                auto indices_count      = sparse_count;
+                auto indices_bufferView = sparse.at(json::json_pointer("/indices/bufferView")).get<uint32_t>();
+                auto indices_byteOffset = sparse.value(json::json_pointer("/indices/byteOffset"), 0u);
+                auto indices_componentType = sparse.at(json::json_pointer("/indices/componentType")).get<uint32_t>();
+
+                //auto bv_i = acc["bufferView"].get<uint32_t>();
+                auto & bv = doc["bufferViews"][ indices_bufferView ];
+                auto bufferViewByteStride = bv.value("byteStride", 0u);
+                auto bufferViewByteOffset = bv.value("byteOffset", 0u);
+
+                auto b_i  = bv["buffer"].get<uint32_t>();
+                auto & buffer = bufs.at(b_i);
+
+                auto attr = fromGLTFAccessor(buffer.data() + bufferViewByteOffset,
+                                                bufferViewByteStride,
+                                                indices_count,
+                                                indices_byteOffset,
+                                                indices_componentType,
+                                                "SCALAR");
+                indices = std::move(attr);
+            }
+            {
+                auto values_count      = sparse_count;
+                auto values_bufferView = sparse.at(json::json_pointer("/values/bufferView")).get<uint32_t>();
+                auto values_byteOffset = sparse.value(json::json_pointer("/indices/byteOffset"), 0u);
+                auto values_componentType = componentType;
+
+                auto & bv = doc["bufferViews"][ values_bufferView ];
+                auto b_i  = bv["buffer"].get<uint32_t>();
+                auto & buffer = bufs.at(b_i);
+
+                auto attr = fromGLTFAccessor(buffer.data() + bv.value("byteOffset", 0u),
+                                                bv.value("byteStride", 0u),
+                                                values_count,
+                                                values_byteOffset,
+                                                values_componentType,
+                                                type);
+                values = std::move(attr);
+            }
 #if 1
-        auto type = a.value("type", std::string("UNKNOWN"));
-        auto componentType = a.value("componentType", 0u);
-        auto count = a.value("count", 0u);
-        auto byteOffset = a.value("byteOffset", 0u);
-        auto bufferViewByteStride = bv.value("byteStride", 0u);
-        auto bufferViewByteOffset = bv.value("byteOffset", 0u);
+            //if(values.getComponentType() == eComponentType::FLOAT)
+            {
+                auto numComponents = values.getNumComponents();
+                auto index_size    = indices.getAttributeSize();
+                auto value_size    = values.getAttributeSize();
 
-        auto V = fromGLTFAccessor(buffer.data() + bufferViewByteOffset,
-                         bufferViewByteStride, count, byteOffset,componentType,type);
-#else
+                auto indexCount = indices.attributeCount();
 
-        uint32_t stride=0;
-        auto type = a["type"].get<std::string>();
-        auto componentType = a["componentType"].get<uint32_t>();
-        auto count = a["count"].get<uint32_t>();
+                for(uint32_t i=0;i<indexCount;i++)
+                {
+                    uint32_t index = 0;
+                    switch(indices.getComponentType())
+                    {
+                        case eComponentType::BYTE:           index = static_cast<uint32_t>(indices.getComponentValue<uint8_t>(i));
+                        case eComponentType::UNSIGNED_BYTE:  index = static_cast<uint32_t>(indices.getComponentValue<int8_t>(i));
+                        case eComponentType::SHORT:          index = static_cast<uint32_t>(indices.getComponentValue<int16_t>(i));
+                        case eComponentType::UNSIGNED_SHORT: index = static_cast<uint32_t>(indices.getComponentValue<uint16_t>(i));
+                        case eComponentType::INT:            index = static_cast<uint32_t>(indices.getComponentValue<int32_t>(i));
+                        case eComponentType::UNSIGNED_INT:   index = static_cast<uint32_t>(indices.getComponentValue<uint32_t>(i));
+                        default:
+                            throw std::runtime_error("Invalid component type. Must be integral");
+                    }
+#define DO_TYPE(TYPE)\
+                    if(values.getComponentType() == type_to_component<TYPE>())\
+                    for(uint j=0;j<numComponents;j++)\
+                    {\
+                        auto compVal = values.getComponentValue<TYPE>(numComponents*i + j);\
+                        auto srcVal  = V.getComponentValue<TYPE>(numComponents * index + j);\
+                        srcVal += compVal;\
+                        V.setComponentValue<TYPE>(numComponents * index + j, srcVal);\
+                    }
 
-        eType _type = {};
-        if(type == "SCALAR") _type = eType::SCALAR;
-        if(type == "VEC2") _type = eType::VEC2;
-        if(type == "VEC3") _type = eType::VEC3;
-        if(type == "VEC4") _type = eType::VEC4;
-
-        auto bufferViewData = buffer.data();
-        if(bv.contains("byteOffset"))
-        {
-            bufferViewData += bv.at("byteOffset").get<uint32_t>();
-        }
-        if(a.contains("byteOffset"))
-        {
-            bufferViewData += a.at("byteOffset").get<uint32_t>();
-        }
-        VertexAttribute V( eComponentType(componentType), _type);
-        if(bv.contains("byteStride"))
-        {
-            stride = bv.at("byteStride").get<uint32_t>();
+                    DO_TYPE(float)
+                    DO_TYPE(uint16_t)
+                    DO_TYPE(uint32_t)
+                    DO_TYPE(int16_t)
+                    DO_TYPE(int32_t)
+                    DO_TYPE(double)
+                    DO_TYPE(int8_t)
+                    DO_TYPE(uint8_t)
+                }
+            }
+#endif
+            assert(values.attributeCount() == indices.attributeCount());
+            return {};
         }
         else
         {
-            stride = V.getAttributeSize();
-        }
+            std::cout << "Regular Accessor Found" << std::endl;
+            auto bv_i = acc["bufferView"].get<uint32_t>();
+            auto & bv = doc["bufferViews"][ bv_i ];
+            auto b_i  = bv["buffer"].get<uint32_t>();
+            auto & buffer = bufs.at(b_i);
 
-        auto attrSize = V.getAttributeSize();
-        for(uint32_t jj=0;jj<count;jj++)
-        {
-            std::memcpy( static_cast<uint8_t*>(V.data()) + jj*attrSize,
-                         bufferViewData  + jj*stride,
-                         attrSize);
-        }
+            auto bufferViewByteStride = bv.value("byteStride", 0u);
+            auto bufferViewByteOffset = bv.value("byteOffset", 0u);
 
-        #endif
-        //std::cout << "Accessor Found: " << type << "   " << V.getByteSize() << "   Count: " << V.attributeCount() << std::endl;
-        accessors.push_back( std::move(V) );
+            auto V = fromGLTFAccessor(buffer.data() + bufferViewByteOffset,
+                                      bufferViewByteStride, count, byteOffset,componentType,type);
+            return V;
+        }
     };
 
+    for(auto & a : J["accessors"])
+    {
+        //std::cout << a.dump(4) << std::endl;
+        accessors.push_back( _extractAccessor(J, a, buffers) );
+    };
+    std::cout << "Accessors Loaded successfully" << std::endl;
     for(auto & i : J["images"])
     {
         if(i.contains("uri"))
