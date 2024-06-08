@@ -731,6 +731,39 @@ protected:
 
 
 /**
+ * @brief initializeFromGLTFAccessor
+ * @param accessorCount
+ * @param accessorComponentType
+ * @param accessorType
+ * @return
+ *
+ * Given  the information from the GLTF::accessor[x] object, return
+ * an zero initialized vertex attribute
+ */
+inline VertexAttribute initializeFromGLTFAccessor(uint32_t accessorCount,
+                                                  uint32_t accessorComponentType,
+                                                  std::string accessorType)
+{
+    VertexAttribute V;
+
+    uint32_t accessorSize = component_size(static_cast<eComponentType>(accessorComponentType));
+
+    assert(accessorSize != 0);
+
+    V.setComponent(static_cast<eComponentType>(accessorComponentType));
+    if(accessorType == "SCALAR")      { V.setType(eType::SCALAR); accessorSize *= 1; }
+    else if(accessorType == "VEC2")   { V.setType(eType::VEC2); accessorSize *= 2;   }
+    else if(accessorType == "VEC3")   { V.setType(eType::VEC3); accessorSize *= 3;   }
+    else if(accessorType == "VEC4")   { V.setType(eType::VEC4); accessorSize *= 4;   }
+    else if(accessorType == "MAT2")   { V.setType(eType::MAT2); accessorSize *= 4;   }
+    else if(accessorType == "MAT3")   { V.setType(eType::MAT3); accessorSize *= 9;   }
+    else if(accessorType == "MAT4")   { V.setType(eType::MAT4); accessorSize *= 16;  }
+
+    V.resize(accessorCount);
+
+    return V;
+}
+/**
  * @brief fromGLTFAccessor
  * @param startOfBufferView
  * @param bufferViewByteStride
