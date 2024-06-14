@@ -87,6 +87,9 @@ struct Material
 
 struct Primitive
 {
+    // the regular GLTF asset has the primitives
+    // explicitaly defined in here. Instead
+    // we give an index to look up the primitive
     typed_id<MeshPrimitive> primitive;
     typed_id<Material>      material;
 };
@@ -103,11 +106,20 @@ struct Node : gul::Transform
     typed_id<Mesh>              mesh;
 };
 
+struct Image_ref
+{
+    std::string mimeType;
+    std::string name;
+    std::string uri;
+
+    gul::Image img;
+};
+
 struct GLTFAsset
 {
-    Image& get(typed_id<Image> id)
+    Image& get(typed_id<Image_ref> id)
     {
-        return images.at(id.index);
+        return images.at(id.index).img;
     }
     Mesh& get(typed_id<Mesh> id)
     {
@@ -121,7 +133,7 @@ struct GLTFAsset
     //std::vector<Sampler>       samplers;
     // low level objects
     std::vector<MeshPrimitive> primitives;
-    std::vector<Image>         images;
+    std::vector<Image_ref>         images;
 
     // low
 
@@ -137,7 +149,7 @@ struct GLTFAsset
     _DEF_VECTOR(Sampler, samplers);
 };
 
-GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath)
+GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAllImages = true)
 {
     using namespace nlohmann;
 
@@ -368,17 +380,15 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath)
     std::cout << "Accessors Loaded successfully" << std::endl;
     for(auto & i : J["images"])
     {
+        auto & Im = G.images.emplace_back();
+
+        Im.mimeType = i.value("mimeType", std::string(""));
+        Im.name = i.value("name", std::string(""));
         if(i.contains("uri"))
         {
             auto path = rootPath + "/" + i.at("uri").get<std::string>();
-
-            #if 1
-                G.images.push_back( gul::loadImage(path) );
-            #else
-                std::ifstream i(path, std::ios_base::binary);
-                auto data = std::vector<char>( std::istreambuf_iterator<char>(i), std::istreambuf_iterator<char>() );
-                G.images.push_back( gul::loadImage(data.data(), int(data.size())));
-            #endif
+            Im.uri = i.at("uri").get<std::string>();
+            Im.img = gul::loadImage(path);
         }
         else if(i.contains("bufferView"))
         {
@@ -395,7 +405,7 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath)
 
             auto I = gul::loadImage(bufferData, byteLength);
 
-            G.images.push_back( std::move(I));
+            Im.img = std::move(I);
         }
     }
 
