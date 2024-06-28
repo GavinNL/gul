@@ -34,10 +34,17 @@ struct Sampler
     int wrapT     = 10497;
 };
 
+struct KHR_texture_basisu_t
+{
+    typed_id<Image> source;
+};
+
 struct Texture
 {
     typed_id<Sampler> sampler;
     typed_id<Image>   source;
+
+    std::optional<KHR_texture_basisu_t> KHR_texture_basisu;
 };
 
 struct Material
@@ -377,6 +384,12 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAll
         //std::cout << a.dump(4) << std::endl;
         accessors.push_back( _extractAccessor(J, a, buffers) );
     };
+
+    auto ends_with = [](std::string_view str, std::string_view suffix)
+    {
+        return str.size() >= suffix.size() && str.compare(str.size()-suffix.size(), suffix.size(), suffix) == 0;
+    };
+
     std::cout << "Accessors Loaded successfully" << std::endl;
     for(auto & i : J["images"])
     {
@@ -388,7 +401,10 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAll
         {
             auto path = rootPath + "/" + i.at("uri").get<std::string>();
             Im.uri = i.at("uri").get<std::string>();
-            Im.img = gul::loadImage(path);
+
+            // check if its jpg or png
+            if( ends_with(Im.uri, "png") || ends_with(Im.uri, "jpg") || ends_with(Im.uri, "jpeg"))
+                Im.img = gul::loadImage(path);
         }
         else if(i.contains("bufferView"))
         {
@@ -493,6 +509,15 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAll
         auto & S = G.textures.emplace_back();
         if(t.contains("sampler")) S.sampler.index  = t["sampler"].get<uint32_t>();
         if(t.contains("source"))  S.source .index  = t["source"].get<uint32_t>();
+        if(t.contains("extensions"))
+        {
+            auto & ext = t.at("extensions");
+            if(ext.contains("KHR_texture_basisu"))
+            {
+                auto & khr = S.KHR_texture_basisu.emplace();
+                khr.source.index = ext.at("KHR_texture_basisu").value("source", 0xFFFFFFFF);
+            }
+        }
     }
 
 
