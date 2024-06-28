@@ -5,8 +5,10 @@
 #include <filesystem>
 #include <map>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <set>
+#include <any>
 
 namespace gul
 {
@@ -43,6 +45,12 @@ struct File
 struct Directory
 {
     std::vector<std::shared_ptr<void>> descriptors;
+};
+
+struct Custom
+{
+    std::string type;
+    std::any    value;
 };
 
 struct Mount
@@ -165,7 +173,7 @@ struct Mount
 #endif
 };
 
-using FileDescriptor = std::variant<File, Directory, Mount>;
+using FileDescriptor = std::variant<File, Directory, Mount, Custom>;
 
 
 struct VFS
@@ -216,9 +224,38 @@ struct VFS
     }
 
     template<typename callable_t>
+    bool open(vfs_path_type const & p, callable_t && C) const
+    {
+        auto hp = host_path(p);
+        if(std::filesystem::exists(hp))
+        {
+            std::ifstream in(hp);
+            C(in);
+            return true;
+        }
+        return false;
+    }
+
+    template<typename callable_t>
     void for_each_file(vfs_path_type const & p, callable_t && C) const
     {
         return for_each(p,C);
+    }
+
+    template<typename callable_t>
+    void for_each_file_recursive(vfs_path_type const & root, callable_t && C) const
+    {
+        return for_each_file(root, [root,&C, this](auto const & _p)
+        {
+            if(is_directory(root / _p))
+            {
+                for_each_file_recursive(root / _p, C);
+            }
+            else
+            {
+                C(root / _p);
+            }
+        });
     }
 
     template<typename callable_t>
