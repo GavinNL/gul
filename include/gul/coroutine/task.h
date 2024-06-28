@@ -3,6 +3,7 @@
 
 #include <coroutine>
 #include <utility>
+#include <exception>
 
 namespace gul
 {
@@ -105,7 +106,16 @@ struct Task_t
 
     void resume()
     {
-        handle.resume();
+        try
+        {
+            handle.resume();
+        }
+        catch (std::exception & e)
+        {
+            std::cout << "Exception Thrown: " << e.what() << std::endl;
+            throw e;
+        }
+
     }
 
     T operator()()
