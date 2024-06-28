@@ -1,87 +1,115 @@
 stages:
-- analysis
-- test
+#- analysis
+- build
+#- test
 
-.build-ubuntu-lts:
-    image: conanio/conangcc8
-    stage: test
+.build_template: &job_definition
+    stage: build
     before_script:
-      - sudo apt update
-      - sudo apt install python3 python3-pip -y ${ADDITIONAL_PACKAGES}
-      - pip3 install --user gcovr
-      - export PATH=$HOME/.local/bin:$PATH
-      - conan remote add bincrafters https://api.bintray.com/conan/bincrafters/public-conan
       - env
+      - apt update
+      - apt install -y wget curl tar
+      - wget https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-x86_64.sh
+      - chmod +x cmake-3.29.6-linux-x86_64.sh
+
+      - ./cmake-3.29.6-linux-x86_64.sh --skip-license --prefix=/usr/local
+
     script:
+      - echo $USER    ---   $HOME
+      - cmake --version
+      - echo Working directory $PWD
+
+      - apt install -y python3-pip python3-setuptools rpm ${ADDITIONAL_PACKAGES}
+
+      - pip3 install conan ${ADDITIONAL_PYTHON_PACKAGES} ${ADDITIONAL_PIP3_ARGS}
+ 
       - mkdir -p build && cd build
+      - conan profile detect --force
 
-      - if [ -f ../conanfile.txt ]; then conan profile new autodetect --detect --force ; fi
-      - if [ -f ../conanfile.txt ]; then conan install -pr autodetect .. --build missing ${ADDITIONAL_CONAN_FLAGS} ; fi
 
-      - cmake .. ${ADDITIONAL_CMAKE_FLAGS}
-      - cmake --build .
-      - ctest --output-on-failure
-      - make coverage
+      - conan install --build missing -s:h "&:build_type=${BUILD_TYPE}" -s "compiler.cppstd=20" -s compiler.libcxx=libstdc++11 -of=$PWD ../conanfile.txt 
+
+      - cmake .. --preset conan-$(echo "${BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')
+
+      - cmake --build . --parallel $(nproc)
+
+      - ctest 
+
+      - export TZ="America/New_York"
+      - ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+    
+      - if [[ ${BUILD_TYPE} == "Debug" ]]; then apt install -y gcovr; fi
+      - if [[ ${BUILD_TYPE} == "Debug" ]]; then cmake --build . --target coverage;  fi
+
+      # Build a debian Package
+      - cpack -G DEB
+
+      # Build an RPM package
+      - cpack -G RPM
+
+      - mkdir -p ../artifacts
+      - mv *.deb *.rpm ../artifacts
+  
     artifacts:
       paths:
-        - build/coverage/
+        - artifacts/*
       expire_in: 1 week
 
 
-build-bionic-gcc7:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc7
+build-jammy-gcc11:
+    <<: *job_definition           # Merge the contents of the 'job_definition' alias
+    image: ubuntu:jammy
     variables:
-        CC: '/usr/bin/gcc-7'
-        CXX: '/usr/bin/g++-7'
+        ADDITIONAL_PACKAGES: 'gcc g++'
+        CC: '/usr/bin/gcc-11'
+        CXX: '/usr/bin/g++-11'
+        BUILD_TYPE: 'Debug'
+        ADDITIONAL_PYTHON_PACKAGES: ''
+        ADDITIONAL_CMAKE_FLAGS: ''
+        ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
+    artifacts:
+      paths:
+        - build/coverage/
+    coverage: '/^TOTAL.*\s+(\d+\%)$/'
+
+build-jammy-clang14:
+    <<: *job_definition           # Merge the contents of the 'job_definition' alias
+    image: ubuntu:jammy
+    variables:
+        ADDITIONAL_PACKAGES: 'clang'
+        CC: '/usr/bin/clang'
+        CXX: '/usr/bin/clang++'
+        BUILD_TYPE: 'Release'
+        ADDITIONAL_PYTHON_PACKAGES: ''
         ADDITIONAL_CMAKE_FLAGS: ''
         ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
 
-build-focal-gcc8:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc8
+build-noble-gcc13:
+    <<: *job_definition           # Merge the contents of the 'job_definition' alias
+    image: ubuntu:noble
     variables:
-        CC: '/usr/bin/gcc-8'
-        CXX: '/usr/bin/g++-8'
+        ADDITIONAL_PACKAGES: 'gcc g++'
+        CC: '/usr/bin/gcc-13'
+        CXX: '/usr/bin/g++-13'
+        BUILD_TYPE: 'Release'
+        ADDITIONAL_PYTHON_PACKAGES: ''
         ADDITIONAL_CMAKE_FLAGS: ''
         ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
+        ADDITIONAL_PIP3_ARGS: '--break-system-packages'
 
-build-focal-gcc9:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc10
-    variables:
-        CC: '/usr/bin/gcc-9'
-        CXX: '/usr/bin/g++-9'
-        ADDITIONAL_PACKAGES: 'gcc-9 g++-9'
-        ADDITIONAL_CMAKE_FLAGS: ''
-        ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
 
-build-focal-clang9:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc10
+build-noble-clang18:
+    <<: *job_definition           # Merge the contents of the 'job_definition' alias
+    image: ubuntu:noble
     variables:
-        CC: '/usr/bin/clang-9'
-        CXX: '/usr/bin/clang++-9'
-        ADDITIONAL_PACKAGES: 'clang-9'
+        ADDITIONAL_PACKAGES: 'clang'
+        CC: '/usr/bin/clang'
+        CXX: '/usr/bin/clang++'
+        BUILD_TYPE: 'Release'
+        ADDITIONAL_PYTHON_PACKAGES: ''
         ADDITIONAL_CMAKE_FLAGS: ''
         ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
+        ADDITIONAL_PIP3_ARGS: '--break-system-packages'
 
-build-focal-clang10:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc10
-    variables:
-        CC: '/usr/bin/clang-10'
-        CXX: '/usr/bin/clang++-10'
-        ADDITIONAL_PACKAGES: 'clang-10'
-        ADDITIONAL_CMAKE_FLAGS: ''
-        ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
 
-build-focal-clang11:
-    extends: .build-ubuntu-lts
-    image: conanio/gcc10
-    variables:
-        CC: '/usr/bin/clang-11'
-        CXX: '/usr/bin/clang++-11'
-        ADDITIONAL_PACKAGES: 'clang-11'
-        ADDITIONAL_CMAKE_FLAGS: ''
-        ADDITIONAL_CONAN_FLAGS: '-s compiler.libcxx=libstdc++11'
