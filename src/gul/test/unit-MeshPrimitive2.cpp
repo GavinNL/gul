@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <gul/MeshPrimitive2.h>
 #include <glm/glm.hpp>
@@ -346,10 +346,10 @@ SCENARIO("get minmax")
         WHEN("We change the type to a scalar")
         {
             auto [_m, _M] = V.getMinMax<float>();
-            REQUIRE( _m[0] == Approx(1));
-            REQUIRE( _m[1] == Approx(2));
-            REQUIRE( _M[0] == Approx(7));
-            REQUIRE( _M[1] == Approx(8));
+            REQUIRE( _m[0] == Catch::Approx(1));
+            REQUIRE( _m[1] == Catch::Approx(2));
+            REQUIRE( _M[0] == Catch::Approx(7));
+            REQUIRE( _M[1] == Catch::Approx(8));
         }
     }
 }

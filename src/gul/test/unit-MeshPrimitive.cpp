@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <gul/MeshPrimitive.h>
 
@@ -140,7 +140,7 @@ SCENARIO("Copy Sequential with nullptr")
 
 SCENARIO("Load obj")
 {
-    std::ifstream in(CMAKE_SOURCE_DIR "/test/data/test.obj");
+    std::ifstream in(CMAKE_CURRENT_SOURCE_DIR "/data/test.obj");
     auto M = gul::ReadOBJ(in);
 
     REQUIRE(M.indexCount() == 3);

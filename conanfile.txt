@@ -5,11 +5,6 @@ stb/cci.20240213
 nlohmann_json/3.11.3
 meshoptimizer/0.20
 
-
-[options]
-catch2/*:with_benchmark=True
-
-#[generators]
-#cmake
-#cmake_paths
-#cmake_find_package
+[generators]
+CMakeDeps
+CMakeToolchain

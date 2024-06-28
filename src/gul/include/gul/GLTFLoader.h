@@ -158,6 +158,7 @@ struct GLTFAsset
 
 GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAllImages = true)
 {
+    (void)loadAllImages;
     using namespace nlohmann;
 
     std::map<uint32_t, std::vector<char>> buffers;
@@ -319,8 +320,8 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAll
             //if(values.getComponentType() == eComponentType::FLOAT)
             {
                 auto numComponents = values.getNumComponents();
-                auto index_size    = indices.getAttributeSize();
-                auto value_size    = values.getAttributeSize();
+                //auto index_size    = indices.getAttributeSize();
+                //auto value_size    = values.getAttributeSize();
 
                 auto indexCount = indices.attributeCount();
 
@@ -329,12 +330,12 @@ GLTFAsset loadGLTF(std::istream & in, std::string const & rootPath, bool loadAll
                     uint32_t index = 0;
                     switch(indices.getComponentType())
                     {
-                        case eComponentType::BYTE:           index = static_cast<uint32_t>(indices.getComponentValue<uint8_t>(i));
-                        case eComponentType::UNSIGNED_BYTE:  index = static_cast<uint32_t>(indices.getComponentValue<int8_t>(i));
-                        case eComponentType::SHORT:          index = static_cast<uint32_t>(indices.getComponentValue<int16_t>(i));
-                        case eComponentType::UNSIGNED_SHORT: index = static_cast<uint32_t>(indices.getComponentValue<uint16_t>(i));
-                        case eComponentType::INT:            index = static_cast<uint32_t>(indices.getComponentValue<int32_t>(i));
-                        case eComponentType::UNSIGNED_INT:   index = static_cast<uint32_t>(indices.getComponentValue<uint32_t>(i));
+                        case eComponentType::BYTE:           index = static_cast<uint32_t>(indices.getComponentValue<uint8_t>(i)); break;
+                        case eComponentType::UNSIGNED_BYTE:  index = static_cast<uint32_t>(indices.getComponentValue<int8_t>(i)); break;
+                        case eComponentType::SHORT:          index = static_cast<uint32_t>(indices.getComponentValue<int16_t>(i)); break;
+                        case eComponentType::UNSIGNED_SHORT: index = static_cast<uint32_t>(indices.getComponentValue<uint16_t>(i)); break;
+                        case eComponentType::INT:            index = static_cast<uint32_t>(indices.getComponentValue<int32_t>(i)); break;
+                        case eComponentType::UNSIGNED_INT:   index = static_cast<uint32_t>(indices.getComponentValue<uint32_t>(i)); break;
                         default:
                             throw std::runtime_error("Invalid component type. Must be integral");
                     }

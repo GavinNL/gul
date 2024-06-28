@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <gul/MeshPrimitiveFunctions.h>
 
@@ -160,7 +160,7 @@ SCENARIO("convertAttribe_t")
                     REQUIRE(V.getShape()[0] == 3);
                     REQUIRE(V.getShape()[1] == 2);
                 }
-                THEN("The values are approximately back to their original")
+                THEN("The values are Catch::Approximately back to their original")
                 {
                     REQUIRE(V.get<uint32_t>(0) == 0x01);
                     REQUIRE(V.get<uint32_t>(1) == 0x02);
@@ -240,7 +240,7 @@ SCENARIO("convertAttribe_t vec4 to vec3")
                     REQUIRE(V.getShape()[0] == 2);
                     REQUIRE(V.getShape()[1] == 4);
                 }
-                THEN("The values are approximately back to their original")
+                THEN("The values are Catch::Approximately back to their original")
                 {
                     REQUIRE(V.get<uint32_t>(0) == 0x01);
                     REQUIRE(V.get<uint32_t>(1) == 0x02);
@@ -313,14 +313,14 @@ SCENARIO("pack 2xfloats into 1 u32")
                     REQUIRE(V.getShape()[0] == 3);
                     REQUIRE(V.getShape()[1] == 2);
                 }
-                THEN("The values are approximately back to their original")
+                THEN("The values are Catch::Approximately back to their original")
                 {
-                    REQUIRE(V.get<float>(0) == Approx(0.5) .epsilon(0.01));
-                    REQUIRE(V.get<float>(1) == Approx(1.0) .epsilon(0.01));
-                    REQUIRE(V.get<float>(2) == Approx(0.8) .epsilon(0.01));
-                    REQUIRE(V.get<float>(3) == Approx(0.25).epsilon(0.01));
-                    REQUIRE(V.get<float>(4) == Approx(0.75).epsilon(0.01));
-                    REQUIRE(V.get<float>(5) == Approx(0.0) .epsilon(0.01));
+                    REQUIRE(V.get<float>(0) == Catch::Approx(0.5) .epsilon(0.01));
+                    REQUIRE(V.get<float>(1) == Catch::Approx(1.0) .epsilon(0.01));
+                    REQUIRE(V.get<float>(2) == Catch::Approx(0.8) .epsilon(0.01));
+                    REQUIRE(V.get<float>(3) == Catch::Approx(0.25).epsilon(0.01));
+                    REQUIRE(V.get<float>(4) == Catch::Approx(0.75).epsilon(0.01));
+                    REQUIRE(V.get<float>(5) == Catch::Approx(0.0) .epsilon(0.01));
                 }
             }
         }
@@ -377,23 +377,23 @@ SCENARIO("pack 3xfloats into 1 u32")
                     REQUIRE(V.getShape()[0] == 5);
                     REQUIRE(V.getShape()[1] == 3);
                 }
-                THEN("The values are approximately back to their original")
+                THEN("The values are Catch::Approximately back to their original")
                 {
-                    REQUIRE(V.get<float>(0) == Approx(-1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(1) == Approx(-1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(2) == Approx(-1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(3) == Approx(-0.00f) .epsilon(0.03f));
-                    REQUIRE(V.get<float>(4) == Approx(-0.00f) .epsilon(0.03f));
-                    REQUIRE(V.get<float>(5) == Approx(-0.00f) .epsilon(0.03f));
-                    REQUIRE(V.get<float>(6) == Approx( 1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(7) == Approx( 1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(8) == Approx( 1.0f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(9) == Approx(  0.5f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(10) == Approx( 0.5f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(11) == Approx( 0.5f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(12) == Approx(-0.5f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(13) == Approx(-0.5f) .epsilon(0.01f));
-                    REQUIRE(V.get<float>(14) == Approx(-0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(0) == Catch::Approx(-1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(1) == Catch::Approx(-1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(2) == Catch::Approx(-1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(3) == Catch::Approx(-0.00f) .epsilon(0.03f));
+                    REQUIRE(V.get<float>(4) == Catch::Approx(-0.00f) .epsilon(0.03f));
+                    REQUIRE(V.get<float>(5) == Catch::Approx(-0.00f) .epsilon(0.03f));
+                    REQUIRE(V.get<float>(6) == Catch::Approx( 1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(7) == Catch::Approx( 1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(8) == Catch::Approx( 1.0f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(9) == Catch::Approx(  0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(10) == Catch::Approx( 0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(11) == Catch::Approx( 0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(12) == Catch::Approx(-0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(13) == Catch::Approx(-0.5f) .epsilon(0.01f));
+                    REQUIRE(V.get<float>(14) == Catch::Approx(-0.5f) .epsilon(0.01f));
                 }
             }
         }

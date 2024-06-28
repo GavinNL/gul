@@ -1,95 +1,138 @@
-cmake_minimum_required(VERSION 3.8)
-
-#########################################################
-project(gul  VERSION 1.0.0)
-#########################################################
+cmake_minimum_required(VERSION 3.10)
 
 
-get_directory_property( _is_sub_project PARENT_DIRECTORY)
-if(_is_sub_project)
-
-    option( ${PROJECT_NAME}_ENABLE_COVERAGE "Enable Coverage."       FALSE)
-    option( ${PROJECT_NAME}_ENABLE_WARNINGS "Enable Strict Warnings" FALSE)
-    option( ${PROJECT_NAME}_ENABLE_TESTING  "Enable Unit Tests"      FALSE)
-
-else()
-
-    option( ${PROJECT_NAME}_ENABLE_COVERAGE "Enable Coverage."       TRUE)
-    option( ${PROJECT_NAME}_ENABLE_WARNINGS "Enable Strict Warnings" TRUE)
-    option( ${PROJECT_NAME}_ENABLE_TESTING  "Enable Unit Tests"      TRUE)
-
-    #########################################################
-    include(cmake/StandardProjectSettings.cmake)
-    include(cmake/CompilerWarnings.cmake)
-    include(cmake/Coverage.cmake)
-    #########################################################
-
-    #########################################################
-    # Other targets
-    #########################################################
-    add_custom_target( ${PROJECT_NAME}_other_files
-                            SOURCES
-                              # .travis/install.sh
-                              # .travis/build.sh
-                               README.md
-                              # LICENSE
-                               .gitlab-ci.yml
-                              # .travis.yml
-                               conanfile.txt
-                               appveyor.yml
-                               cmake/CompilerWarnings.cmake
-                               cmake/Coverage.cmake
-                    )
-    #########################################################
-
-endif()
-
-
-
-#########################################################
-# Create an interface library so that we can link to
-# The proper configurations.
+################################################################################
+# This Top-level project is for a single Top-level library
 #
-# Any target that wants to use gnl should link to
-# ABC::ABC.  eg:
+# A single library
+# Unit tests for the library
+# A set of executables which use this library
+################################################################################
+
+
+
+################################################################################
+# Project name
 #
-#  target_link_libraries(myexe ABC::ABC)
+#  many targets will be created:
+#   myProject::warnings
+#   myProject:
+################################################################################
+project( gul
+         VERSION 1.0.0.0
+         LANGUAGES CXX)
+
+################################################################################
+
+
+include(.cmake/extras.cmake)
+
+option( ${PROJECT_NAME}_BUILD_UNIT_TESTS "Build the unit tests for this library"       TRUE)
+option( ${PROJECT_NAME}_ENABLE_COVERAGE  "Enable Coverage. After build, execute: make coverage"       TRUE)
+option( ${PROJECT_NAME}_ENABLE_WARNINGS  "Enable Strict Warnings"                                     TRUE)
+option( ${PROJECT_NAME}_PACKAGE_INCLUDE_SOURCE "Include source files when building the package"      TRUE)
+
+################################################################################
+# Find all the packages we need
 #
-#########################################################
-set(lib_name   ${PROJECT_NAME})
-set(lib_alias  ${PROJECT_NAME}::${PROJECT_NAME})
-
-add_library( ${lib_name} INTERFACE)
-add_library( ${lib_alias} ALIAS ${lib_name} )
-
-target_compile_features( ${lib_name}
-                            INTERFACE
-                                cxx_std_17
-                        )
-target_include_directories( ${lib_name}
-                                INTERFACE
-                                    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-                                    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated_headers>"
-                           )
-
-if( ${PROJECT_NAME}_ENABLE_COVERAGE )
-    set_coverage_flags(${lib_name})
-endif()
-if( ${PROJECT_NAME}_ENABLE_WARNINGS )
-    set_project_warnings(${lib_name})
-endif()
-#########################################################
+# Each module in the src/ folder can also define its own find_package 
+# if they are meant to be private
+#
+################################################################################
+#find_package(fmt REQUIRED)
+#find_package(glm REQUIRED)
+#find_package(glm REQUIRED)
+################################################################################
 
 
 
+################################################################################
+# Top level INTERFACE library which can be used to 
+################################################################################
+set(outName              interface)   # name of the library within the proje
+                                            # Will create the target ${PROJECT_NAME}::${outName}
+
+set(PublicLinkedTargets  "" )               # Any additional public targets you want to include
+#-------------------------------------------------------------------------------
+add_library( ${outName} INTERFACE )
+add_library( ${PROJECT_NAME}::${outName}  ALIAS ${outName})
+
+target_compile_features( ${outName}
+                          INTERFACE
+                              cxx_std_20)
+
+target_compile_definitions( ${outName}
+                              INTERFACE
+                                CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+                                CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+                                )
+
+target_link_libraries( ${outName}  INTERFACE  ${PublicLinkedTargets})
+
+
+include(GNUInstallDirs)
+
+################################################################################
+
+
+#####################################################
+# Macro get get all subdirectories
+#####################################################
+MACRO(SUBDIRLIST result curdir)
+  FILE(GLOB children RELATIVE ${curdir} ${curdir}/*)
+  SET(dirlist "")
+  FOREACH(child ${children})
+    IF(IS_DIRECTORY ${curdir}/${child})
+      LIST(APPEND dirlist ${child})
+    ENDIF()
+  ENDFOREACH()
+  SET(${result} ${dirlist})
+ENDMACRO()
+#####################################################
 
 
 
+#####################################################
+# Loop through all the subdirectories in the /src folder and
+# compile each of the folders into its own library
+#####################################################
+SUBDIRLIST(LIB_FOLDERS ${CMAKE_CURRENT_SOURCE_DIR}/src)
+FOREACH(subdir ${LIB_FOLDERS})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/${subdir}/CMakeLists.txt")
+        add_subdirectory("src/${subdir}")
+    endif()
+ENDFOREACH()
 
-if( _is_sub_project )
-else()
-    #########################################################
-    enable_testing()
-    add_subdirectory(test)
-    #########################################################
-endif()
+
+# enable testing on the root folder so that we can run ctest from it,
+# otherwise we will have to CD into each sub folder to run the unit tests
+enable_testing()
+
+#####################################################
+## PACKAGE
+#####################################################
+SET(CPACK_PACKAGE_NAME          ${PROJECT_NAME})
+SET(CPACK_PACKAGE_VENDOR        ${PROJECT_NAME})
+SET(CPACK_PACKAGE_EXECUTABLES   ${PROJECT_NAME};${PROJECT_NAME})
+
+SET(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${PROJECT_NAME}")
+SET(CPACK_PACKAGE_VERSION              "${PROJECT_VERSION}")
+SET(CPACK_PACKAGE_VERSION_MAJOR        "${PROJECT_VERSION_MAJOR}")
+SET(CPACK_PACKAGE_VERSION_MINOR        "${PROJECT_VERSION_MINOR}")
+SET(CPACK_PACKAGE_VERSION_PATCH        "${PROJECT_VERSION_PATCH}")
+SET(CPACK_PACKAGE_CONTACT       "me")
+
+INCLUDE(InstallRequiredSystemLibraries)
+
+IF(WIN32 AND NOT UNIX)
+  SET(CPACK_NSIS_INSTALLED_ICON_NAME   "bin\\\\${PROJECT_NAME}.exe")
+  SET(CPACK_NSIS_DISPLAY_NAME          "${CPACK_PACKAGE_INSTALL_DIRECTORY}${PROJECT_NAME}")
+  SET(CPACK_NSIS_MODIFY_PATH           ON)
+ENDIF(WIN32 AND NOT UNIX)
+#####################################################
+
+
+INCLUDE(CPack)
+
+
+return()

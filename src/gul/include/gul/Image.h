@@ -275,7 +275,6 @@ inline channel1f operator * (float b, ColorChannel const & a)
 }
 
 
-
 inline channel1f operator + (ColorChannel const & a, float b)
 {
     //std::cout << "construct OneChannel+float" << std::endl;

@@ -1,5 +1,5 @@
 #define CATCH_CONFIG_ENABLE_BENCHMARKING
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <gul/math/Transform.h>
 #include <glm/gtx/io.hpp>
@@ -11,10 +11,11 @@ SCENARIO("test")
 
     auto M = T.getMatrix();
 
-    REQUIRE( M[0][0] == Approx(1.0f));
-    REQUIRE( M[1][1] == Approx(1.0f));
-    REQUIRE( M[2][2] == Approx(1.0f));
-    REQUIRE( M[3][3] == Approx(1.0f));
+
+    REQUIRE( M[0][0] == Catch::Approx(1.0f));
+    REQUIRE( M[1][1] == Catch::Approx(1.0f));
+    REQUIRE( M[2][2] == Catch::Approx(1.0f));
+    REQUIRE( M[3][3] == Catch::Approx(1.0f));
 }
 
 glm::mat4 matrix_multiply(gul::Transform const &T)
@@ -90,17 +91,17 @@ SCENARIO("Testing Transform::getMatrix()")
 
         auto d = T * v;
 
-        REQUIRE( a.x == Approx(b.x));
-        REQUIRE( a.y == Approx(b.y));
-        REQUIRE( a.z == Approx(b.z));
+        REQUIRE( a.x == Catch::Approx(b.x));
+        REQUIRE( a.y == Catch::Approx(b.y));
+        REQUIRE( a.z == Catch::Approx(b.z));
 
-        REQUIRE( c.x == Approx(b.x));
-        REQUIRE( c.y == Approx(b.y));
-        REQUIRE( c.z == Approx(b.z));
+        REQUIRE( c.x == Catch::Approx(b.x));
+        REQUIRE( c.y == Catch::Approx(b.y));
+        REQUIRE( c.z == Catch::Approx(b.z));
 
-        REQUIRE( a.x == Approx(d.x).epsilon(0.1));
-        REQUIRE( a.y == Approx(d.y).epsilon(0.1));
-        REQUIRE( a.z == Approx(d.z).epsilon(0.1));
+        REQUIRE( a.x == Catch::Approx(d.x).epsilon(0.1));
+        REQUIRE( a.y == Catch::Approx(d.y).epsilon(0.1));
+        REQUIRE( a.z == Catch::Approx(d.z).epsilon(0.1));
     }
 
 
