@@ -85,7 +85,7 @@ jobs:
 
     - name: Configure Conan 
       run: |
-        conan install --build missing  -s:h "&:build_type=${{ matrix.build_type }}" -s "compiler.cppstd=20" -of=${{ steps.strings.outputs.build-output-dir }}  ${{ github.workspace }}/conanfile.py -c tools.cmake.cmake_layout:build_folder_vars="[\"const.potato\"]"
+        conan install --build missing  -s:h "&:build_type=${{ matrix.build_type }}" -s "compiler.cppstd=20" -of=${{ steps.strings.outputs.build-output-dir }}  ${{ github.workspace }}/conanfile.py -c tools.cmake.cmake_layout:build_folder_vars="[""const.potato""]"
 
 
     - name: Configure CMake-Linux
