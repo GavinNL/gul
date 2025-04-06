@@ -1,3 +1,4 @@
-build
-buidl2
+build*
+CMakeUserPresets.json
 CMakeLists.txt.user
+

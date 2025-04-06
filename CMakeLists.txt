@@ -49,7 +49,7 @@ option( ${PROJECT_NAME}_PACKAGE_INCLUDE_SOURCE "Include source files when buildi
 ################################################################################
 # Top level INTERFACE library which can be used to 
 ################################################################################
-set(outName              interface)   # name of the library within the proje
+set(outName              ${PROJECT_NAME})   # name of the library within the proje
                                             # Will create the target ${PROJECT_NAME}::${outName}
 
 set(PublicLinkedTargets  "" )               # Any additional public targets you want to include
@@ -66,7 +66,7 @@ target_compile_definitions( ${outName}
                                 CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
                                 CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
                                 )
-
+target_include_directories( ${outName} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries( ${outName}  INTERFACE  ${PublicLinkedTargets})
 
 
@@ -75,38 +75,12 @@ include(GNUInstallDirs)
 ################################################################################
 
 
-#####################################################
-# Macro get get all subdirectories
-#####################################################
-MACRO(SUBDIRLIST result curdir)
-  FILE(GLOB children RELATIVE ${curdir} ${curdir}/*)
-  SET(dirlist "")
-  FOREACH(child ${children})
-    IF(IS_DIRECTORY ${curdir}/${child})
-      LIST(APPEND dirlist ${child})
-    ENDIF()
-  ENDFOREACH()
-  SET(${result} ${dirlist})
-ENDMACRO()
-#####################################################
-
-
-
-#####################################################
-# Loop through all the subdirectories in the /src folder and
-# compile each of the folders into its own library
-#####################################################
-SUBDIRLIST(LIB_FOLDERS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-FOREACH(subdir ${LIB_FOLDERS})
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/${subdir}/CMakeLists.txt")
-        add_subdirectory("src/${subdir}")
-    endif()
-ENDFOREACH()
-
-
 # enable testing on the root folder so that we can run ctest from it,
 # otherwise we will have to CD into each sub folder to run the unit tests
-enable_testing()
+if(${PROJECT_NAME}_BUILD_UNIT_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
 
 #####################################################
 ## PACKAGE
