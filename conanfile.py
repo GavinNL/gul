@@ -1,14 +1,12 @@
-from conan import ConanFile
-from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 from conan.tools.files import copy
-import conan
+from conan import ConanFile
+from conan.tools.cmake import CMakeToolchain, cmake_layout
 import os
-import sys
 
 
 class ConanTutorialRecipe(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-    #generators = "CMakeDeps", "CMakeToolchain"
+    generators = "CMakeDeps", "CMakeToolchain"
 
     #preset_name = os.getenv('CONAN_PRESET_NAME')
     
