@@ -99,7 +99,7 @@ jobs:
     - name: Configure CMake-Windows
       if: matrix.os == 'windows-latest'
       run: >
-        cmake --preset conan-default -B ${{ steps.strings.outputs.build-output-dir }} -S ${{ github.workspace }}
+        cmake --preset conan-potato -B ${{ steps.strings.outputs.build-output-dir }} -S ${{ github.workspace }}
 
 
     - name: Build
