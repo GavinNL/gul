@@ -25,24 +25,7 @@ project( gul
 ################################################################################
 
 
-include(.cmake/extras.cmake)
-
-option( ${PROJECT_NAME}_BUILD_UNIT_TESTS "Build the unit tests for this library"       TRUE)
-option( ${PROJECT_NAME}_ENABLE_COVERAGE  "Enable Coverage. After build, execute: make coverage"       TRUE)
-option( ${PROJECT_NAME}_ENABLE_WARNINGS  "Enable Strict Warnings"                                     TRUE)
-option( ${PROJECT_NAME}_PACKAGE_INCLUDE_SOURCE "Include source files when building the package"      TRUE)
-
-################################################################################
-# Find all the packages we need
-#
-# Each module in the src/ folder can also define its own find_package 
-# if they are meant to be private
-#
-################################################################################
-#find_package(fmt REQUIRED)
-#find_package(glm REQUIRED)
-#find_package(glm REQUIRED)
-################################################################################
+option( ${PROJECT_NAME}_BUILD_UNIT_TESTS "Build the unit tests for this library"                 TRUE)
 
 
 
@@ -78,35 +61,12 @@ include(GNUInstallDirs)
 # enable testing on the root folder so that we can run ctest from it,
 # otherwise we will have to CD into each sub folder to run the unit tests
 if(${PROJECT_NAME}_BUILD_UNIT_TESTS)
+    include(.cmake/extras.cmake)
+    option( ${PROJECT_NAME}_ENABLE_COVERAGE  "Enable Coverage. After build, execute: make coverage"  TRUE)
+    option( ${PROJECT_NAME}_ENABLE_WARNINGS  "Enable Strict Warnings"                                TRUE)
     enable_testing()
     add_subdirectory(test)
 endif()
-
-#####################################################
-## PACKAGE
-#####################################################
-SET(CPACK_PACKAGE_NAME          ${PROJECT_NAME})
-SET(CPACK_PACKAGE_VENDOR        ${PROJECT_NAME})
-SET(CPACK_PACKAGE_EXECUTABLES   ${PROJECT_NAME};${PROJECT_NAME})
-
-SET(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${PROJECT_NAME}")
-SET(CPACK_PACKAGE_VERSION              "${PROJECT_VERSION}")
-SET(CPACK_PACKAGE_VERSION_MAJOR        "${PROJECT_VERSION_MAJOR}")
-SET(CPACK_PACKAGE_VERSION_MINOR        "${PROJECT_VERSION_MINOR}")
-SET(CPACK_PACKAGE_VERSION_PATCH        "${PROJECT_VERSION_PATCH}")
-SET(CPACK_PACKAGE_CONTACT       "me")
-
-INCLUDE(InstallRequiredSystemLibraries)
-
-IF(WIN32 AND NOT UNIX)
-  SET(CPACK_NSIS_INSTALLED_ICON_NAME   "bin\\\\${PROJECT_NAME}.exe")
-  SET(CPACK_NSIS_DISPLAY_NAME          "${CPACK_PACKAGE_INSTALL_DIRECTORY}${PROJECT_NAME}")
-  SET(CPACK_NSIS_MODIFY_PATH           ON)
-ENDIF(WIN32 AND NOT UNIX)
-#####################################################
-
-
-INCLUDE(CPack)
 
 
 return()

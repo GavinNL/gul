@@ -111,7 +111,7 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest --build-config ${{ matrix.build_type }}
 
-    # Execute the coverage report. the cmake target "coverage" is greated in the Cmake file. We just need too 
+    # Execute the coverage report. the cmake target "coverage" is created in the Cmake file. We just need too 
     # execute make coverage on a Debug build.
     # Only run this on a Ubuntu-gcc-debug build
     - name: Run Coverage Report

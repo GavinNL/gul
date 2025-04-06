@@ -6,6 +6,7 @@ find_package(Catch2 REQUIRED)
 find_package(glm REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(stb REQUIRED)
+find_package(meshoptimizer REQUIRED)
 
 set(TESTCASE_PREFIX        "test")
 set(UNIT_TEST_LINK_TARGETS  ${PROJECT_NAME}::interface 
@@ -51,8 +52,12 @@ foreach(file ${files})
     target_link_libraries( ${UNIT_EXE_NAME} 
                                 PUBLIC 
                                     ${PROJECT_NAME}::${PROJECT_NAME}
+                                    ${PROJECT_NAME}::coverage 
+                                    ${PROJECT_NAME}::warnings
+                                    ${PROJECT_NAME}::error
                                     glm::glm
-stb::stb
+                                    stb::stb
+                                    meshoptimizer::meshoptimizer
                                     nlohmann_json::nlohmann_json
                                     Catch2::Catch2WithMain)
 
