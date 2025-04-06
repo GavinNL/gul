@@ -104,11 +104,6 @@ function(set_project_warnings project_name)
       -Wno-gnu-zero-variadic-macro-arguments
   )
 
-  if (${PROJECT_NAME}_WARNINGS_AS_ERRORS)
-      set(CLANG_WARNINGS ${CLANG_WARNINGS} -Werror)
-      set(MSVC_WARNINGS ${MSVC_WARNINGS} /WX )
-  endif()
-
   set(GCC_WARNINGS
       ${CLANG_WARNINGS}
       -Wmisleading-indentation # warn if identation implies blocks where blocks
@@ -134,29 +129,26 @@ function(set_project_warnings project_name)
 
   get_target_property(type ${project_name} TYPE)
   message("--->${type}")
-  if (${type} STREQUAL "INTERFACE_LIBRARY")
-      target_compile_options(${project_name} INTERFACE ${_PROJECT_WARNINGS})
-  else()
-      target_compile_options(${project_name} PRIVATE ${_PROJECT_WARNINGS})
+
+  add_library(${project_name}_warnings INTERFACE)
+  add_library(${project_name}::warnings ALIAS ${project_name}_warnings)
+  target_compile_options(${project_name}_warnings INTERFACE ${_PROJECT_WARNINGS})
+
+  if (${PROJECT_NAME}_WARNINGS_AS_ERRORS)
+      add_library(${project_name}_error INTERFACE)
+      add_library(${project_name}::error ALIAS ${project_name}_error)
+      if(MSVC)
+        target_compile_options(${project_name}_error INTERFACE /WX)
+      else()
+        target_compile_options(${project_name}_error INTERFACE -Werror)
+      endif()
   endif()
-
-
+  
 endfunction()
 #==========
 
+set_project_warnings(${PROJECT_TARGETS_PREFIX})
 
-
-add_library(${PROJECT_TARGETS_PREFIX}_warnings INTERFACE)
-add_library(${PROJECT_TARGETS_PREFIX}::warnings ALIAS ${PROJECT_TARGETS_PREFIX}_warnings)
-
-set_project_warnings(${PROJECT_TARGETS_PREFIX}_warnings)
-
-#target_compile_options(${PROJECT_TARGETS_PREFIX}_warnings INTERFACE -Wall -Wextra -Wpedantic)
-
-
-add_library(${PROJECT_TARGETS_PREFIX}_warnings_error INTERFACE)
-add_library(${PROJECT_TARGETS_PREFIX}::error ALIAS ${PROJECT_TARGETS_PREFIX}_warnings_error)
-target_compile_options(${PROJECT_TARGETS_PREFIX}_warnings_error INTERFACE -Werror)
 
 message("New Target: ${PROJECT_TARGETS_PREFIX}::coverage")
 message("New Target: ${PROJECT_TARGETS_PREFIX}::warnings")
