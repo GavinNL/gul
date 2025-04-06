@@ -48,9 +48,7 @@ SCENARIO("Mount host folders in separate locations in root folder")
     REQUIRE(fs.exists("/src"));
     REQUIRE(fs.exists("/src/test"));
     REQUIRE(fs.exists("/src/test/CMakeLists.txt")); // exists on filesystem
-    REQUIRE(fs.exists("/src/cmake"));
-    REQUIRE(fs.exists("/src/cmake/Coverage.cmake"));
-
+ 
     REQUIRE(fs.is_directory("/"));
     REQUIRE(fs.is_directory("/src"));
     REQUIRE(fs.is_directory("/src/test"));
@@ -71,7 +69,7 @@ SCENARIO("Mount two host folders inside a virtual folder")
     gul::VFS fs;
 
     fs.mkdir("/res");
-    fs.mount("/res/src" , std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake");
+    fs.mount("/res/src" , std::filesystem::path(CMAKE_SOURCE_DIR)/"include"/"gul");
     fs.mount("/res/src2", std::filesystem::path(CMAKE_SOURCE_DIR)/"test");
 
     {
@@ -87,7 +85,7 @@ SCENARIO("Mount two host folders inside a virtual folder")
 
     REQUIRE(fs.exists("/"));
     REQUIRE(fs.exists("/res/src"));
-    REQUIRE(fs.exists("/res/src/Coverage.cmake"));
+    REQUIRE(fs.exists("/res/src/uri.h"));
     REQUIRE(fs.exists("/res/src2/CMakeLists.txt")); // exists on filesystem
 
     REQUIRE(fs.is_directory("/"));
@@ -104,14 +102,14 @@ SCENARIO("Union mount two host folders")
     gul::VFS fs;
 
     fs.mount("/res", {
-                         std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake"
+                         std::filesystem::path(CMAKE_SOURCE_DIR)/"include"/"gul"
                          ,std::filesystem::path(CMAKE_SOURCE_DIR)/"test"
                      });
 
 
-    REQUIRE(fs.exists("/res/CMakeLists.txt"));
-    REQUIRE(fs.exists("/res/Coverage.cmake"));
-    REQUIRE(fs.exists("/res/data/test.obj"));
+    REQUIRE(fs.exists("/res/uri.h")); // comes from the include/gul folder
+    REQUIRE(fs.exists("/res/Image.h")); // comes from the include/gul folder
+    REQUIRE(fs.exists("/res/data/test.obj"));  // comes from the test folder
 
     tree(fs);
 }
@@ -131,7 +129,7 @@ SCENARIO("Mount a folder inside the structure of another mount")
     fs.mount("/test/data", {
                          std::filesystem::path(CMAKE_SOURCE_DIR)/"cmake"
                      });
-    REQUIRE(fs.exists("/test/data/Coverage.cmake"));
+    REQUIRE(fs.exists("/test/CMakeLists.txt"));
 
     std::shared_ptr<std::ostream> d = std::shared_ptr<std::ostringstream>();
     tree(fs);

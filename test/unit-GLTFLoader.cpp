@@ -2,6 +2,11 @@
 #include <iostream>
 #include <gul/GLTFLoader.h>
 
+SCENARIO("No test")
+{
+    REQUIRE(true);
+}
+
 #if 0
 SCENARIO("Stride Copy")
 {
