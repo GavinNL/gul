@@ -85,7 +85,7 @@ jobs:
 
     - name: Configure Conan 
       run: |
-        conan install --build missing  -s:h "&:build_type=${{ matrix.build_type }}" -s "compiler.cppstd=20" -of=${{ steps.strings.outputs.build-output-dir }}  ${{ github.workspace }}/conanfile.txt
+        conan install --build missing  -s:h "&:build_type=${{ matrix.build_type }}" -s "compiler.cppstd=20" -of=${{ steps.strings.outputs.build-output-dir }}  ${{ github.workspace }}/conanfile.py
 
 
     - name: Configure CMake-Linux
