@@ -10,7 +10,7 @@ class ConanTutorialRecipe(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     #generators = "CMakeDeps", "CMakeToolchain"
 
-    preset_name = os.getenv('CONAN_PRESET_NAME')
+    #preset_name = os.getenv('CONAN_PRESET_NAME')
     
     def requirements(self):
         self.requires("catch2/3.6.0");
@@ -32,22 +32,23 @@ class ConanTutorialRecipe(ConanFile):
         '''
         # This makes sure that the generated files are
         # generated in the current working directory
-        self.preset_name = self.conf.get("user:preset_name", default=None)
+        #self.preset_name = self.conf.get("user:preset_name", default=None)
 
-        print(self.build_folder)
-        if self.preset_name is None:
-            self.folders.build_folder_vars = ["settings.compiler", "settings.compiler.version", "settings.build_type"]
-        else:
-            self.folders.build_folder_vars = ["self.preset_name"]
+        #print(self.build_folder)
+        #if self.preset_name is None:
+        #    self.folders.build_folder_vars = ["settings.compiler", "settings.compiler.version", "settings.build_type"]
+        #else:
+        #    self.folders.build_folder_vars = ["self.preset_name"]
 
-        cmake_layout(self)
+        #cmake_layout(self)
         
 
     def generate(self):
-        deps = CMakeDeps(self)
-        deps.generate()
-        tc = CMakeToolchain(self)
-        tc.generate()
+        pass
+        #deps = CMakeDeps(self)
+        #deps.generate()
+        #tc = CMakeToolchain(self)
+        #tc.generate()
 
         # Used to copy additional files from a recipe into the build folder
         #copy(self, "res/*", self.dependencies["imgui"].package_folder, os.path.join(self.build_folder, "imgui_src") )
